@@ -618,7 +618,7 @@ export default function AdminPage() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-900 text-white overflow-hidden" dir="rtl">
-      <header className="shrink-0 bg-slate-800 border-b border-slate-700 px-4 sm:px-6 py-4">
+      <header className="shrink-0 bg-slate-800 border-b border-slate-700 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
