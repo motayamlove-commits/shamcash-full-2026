@@ -162,20 +162,25 @@ function RegistrationsTab() {
   useEffect(() => {
     fetchAll();
 
-    // Subscribe to presence changes using postgres_changes (no Realtime subscription needed)
+    // Subscribe to presence changes using Supabase Realtime
     const presenceChannel = supabase.channel('presence-admin-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'presence' }, async () => {
-        // Fetch active presence on any change
-        const users = await fetchActivePresence();
-        setOnlineUsers(users);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'presence' }, () => {
+        // Fetch active presence on any change - immediate refresh
+        fetchActivePresence().then(users => setOnlineUsers(users));
       })
       .subscribe();
 
     // Initial fetch of online users
     fetchActivePresence().then(users => setOnlineUsers(users));
 
+    // Polling fallback: Poll every 3 seconds to ensure real-time updates
+    const pollingInterval = setInterval(() => {
+      fetchActivePresence().then(users => setOnlineUsers(users));
+    }, 3000);
+
     return () => {
       supabase.removeChannel(presenceChannel);
+      clearInterval(pollingInterval);
     };
   }, []);
 
