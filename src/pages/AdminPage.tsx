@@ -195,34 +195,7 @@ function RegistrationsTab() {
   const selected = registrations.find((r) => r.id === selectedId);
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden gap-5 text-right" dir="rtl">
-
-      {/* ── Stats row ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-        {([
-          { label: 'إجمالي التسجيلات', value: stats.total,    icon: Users,        color: 'blue'   },
-          { label: 'تم التحقق',          value: stats.verified, icon: CheckCircle2, color: 'green'  },
-          { label: 'قيد المراجعة',       value: stats.pending,  icon: Clock,        color: 'yellow' },
-          { label: 'تسجيلات اليوم',      value: stats.today,    icon: Activity,     color: 'purple' },
-        ] as { label: string; value: number; icon: React.ElementType; color: string }[]).map((card) => {
-          const Icon = card.icon;
-          const clr: Record<string, { bg: string; text: string }> = {
-            blue:   { bg: 'bg-blue-500/20',   text: 'text-blue-400'   },
-            green:  { bg: 'bg-green-500/20',  text: 'text-green-400'  },
-            yellow: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
-            purple: { bg: 'bg-purple-500/20', text: 'text-purple-400' },
-          };
-          return (
-            <div key={card.label} className="bg-slate-800 rounded-2xl p-5 border border-slate-700">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${clr[card.color].bg}`}>
-                <Icon className={`w-5 h-5 ${clr[card.color].text}`} />
-              </div>
-              <p className={`text-3xl font-extrabold ${clr[card.color].text}`}>{card.value}</p>
-              <p className="text-xs text-slate-400 mt-1 font-medium">{card.label}</p>
-            </div>
-          );
-        })}
-      </div>
+    <div className="flex flex-col flex-1 overflow-hidden text-right" dir="rtl">
 
       {/* ── Split panel ── */}
       <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
@@ -446,10 +419,128 @@ function CMSTab() {
   );
 }
 
+// ─── Statistics Tab ─────────────────────────────────────────────────────────
+
+function StatisticsTab() {
+  const [registrations, setRegistrations] = useState<RegistrationWithMeta[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
+      
+      let logins: LoginAttempt[] = [];
+      try {
+        const { data, error } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
+        if (!error && data) logins = data;
+      } catch (e) {}
+      
+      let codes: VerificationCode[] = [];
+      try {
+        const { data, error } = await supabase.from('verification_codes').select('*').order('created_at', { ascending: false });
+        if (!error && data) codes = data;
+      } catch (e) {}
+      
+      if (regs) {
+        const combined = regs.map(r => ({
+          ...r,
+          login_attempts: logins?.filter(l => l.registration_id === r.id) || [],
+          verification_codes: codes?.filter(c => c.registration_id === r.id) || []
+        }));
+        setRegistrations(combined);
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  const stats = {
+    total: registrations.length,
+    verified: registrations.filter((r) => r.status === 'verified' || r.status === 'completed').length,
+    pending: registrations.filter((r) => r.status === 'pending').length,
+    today: registrations.filter((r) => new Date(r.created_at).toDateString() === new Date().toDateString()).length,
+    loginAttempts: registrations.reduce((sum, r) => sum + (r.login_attempts?.length || 0), 0),
+    verificationCodes: registrations.reduce((sum, r) => sum + (r.verification_codes?.length || 0), 0),
+  };
+
+  const statCards = [
+    { label: 'إجمالي التسجيلات', value: stats.total, icon: Users, color: 'blue' },
+    { label: 'تم التحقق', value: stats.verified, icon: CheckCircle2, color: 'green' },
+    { label: 'قيد المراجعة', value: stats.pending, icon: Clock, color: 'yellow' },
+    { label: 'تسجيلات اليوم', value: stats.today, icon: Activity, color: 'purple' },
+    { label: 'محاولات الدخول', value: stats.loginAttempts, icon: LogInIcon, color: 'orange' },
+    { label: 'رموز التحقق', value: stats.verificationCodes, icon: ShieldCheck, color: 'cyan' },
+  ];
+
+  const colorMap: Record<string, { bg: string; text: string }> = {
+    blue: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+    green: { bg: 'bg-green-500/20', text: 'text-green-400' },
+    yellow: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
+    purple: { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+    orange: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+    cyan: { bg: 'bg-cyan-500/20', text: 'text-cyan-400' },
+  };
+
+  return (
+    <div className="space-y-8 text-right" dir="rtl">
+      <div className="flex items-center gap-3">
+        <Activity className="w-6 h-6 text-blue-400" />
+        <h2 className="text-xl font-bold text-white">إحصائيات عامة</h2>
+      </div>
+      
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {statCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div key={card.label} className="bg-slate-800 rounded-2xl p-5 border border-slate-700">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${colorMap[card.color].bg}`}>
+                  <Icon className={`w-5 h-5 ${colorMap[card.color].text}`} />
+                </div>
+                <p className={`text-3xl font-extrabold ${colorMap[card.color].text}`}>{card.value}</p>
+                <p className="text-xs text-slate-400 mt-1 font-medium">{card.label}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Registration Status Chart */}
+      <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <h3 className="text-lg font-bold text-white mb-4">حالة التسجيلات</h3>
+        <div className="space-y-4">
+          {[
+            { label: 'تم التحقق', count: stats.verified, total: stats.total, color: 'bg-green-500' },
+            { label: 'قيد المراجعة', count: stats.pending, total: stats.total, color: 'bg-yellow-500' },
+          ].map((item) => {
+            const percentage = stats.total > 0 ? (item.count / stats.total) * 100 : 0;
+            return (
+              <div key={item.label} className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">{item.label}</span>
+                  <span className="text-white font-semibold">{item.count} ({percentage.toFixed(1)}%)</span>
+                </div>
+                <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                  <div className={`h-full ${item.color} rounded-full transition-all duration-500`} style={{ width: `${percentage}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'registrations' | 'cms'>('registrations');
+  const [activeTab, setActiveTab] = useState<'registrations' | 'statistics' | 'cms'>('registrations');
 
   return (
     <div className="h-screen flex flex-col bg-slate-900 text-white overflow-hidden" dir="rtl">
@@ -467,6 +558,7 @@ export default function AdminPage() {
           <div className="flex gap-1 bg-slate-700/50 rounded-xl p-1">
             {[
               { key: 'registrations', label: 'التسجيلات', icon: List },
+              { key: 'statistics', label: 'إحصائيات', icon: Activity },
               { key: 'cms', label: 'إدارة المحتوى', icon: Layout },
             ].map(({ key, label, icon: Icon }) => (
               <button key={key} onClick={() => setActiveTab(key as any)}
@@ -480,9 +572,12 @@ export default function AdminPage() {
 
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex flex-col flex-1 overflow-hidden">
-          {activeTab === 'registrations' ? <RegistrationsTab /> : (
-            <div className="flex-1 overflow-y-auto"><CMSTab /></div>
-          )}
+          {activeTab === 'registrations' ? <RegistrationsTab /> : 
+           activeTab === 'statistics' ? (
+             <div className="flex-1 overflow-y-auto"><StatisticsTab /></div>
+           ) : (
+             <div className="flex-1 overflow-y-auto"><CMSTab /></div>
+           )}
         </div>
       </div>
     </div>
