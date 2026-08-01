@@ -217,7 +217,7 @@ function RegistrationsTab() {
       <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
 
         {/* ── LEFT: Registration list (40%) ── */}
-        <div className="w-2/5 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+        <div className="w-[40%] flex flex-col bg-slate-800 border border-slate-700 overflow-hidden p-0 m-0 rounded-none">
           <div className="shrink-0 px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <Activity className="w-4 h-4 text-blue-400 shrink-0" />
