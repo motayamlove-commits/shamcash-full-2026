@@ -79,7 +79,15 @@ function RegistrationsTab() {
   const fetchAll = async () => {
     setLoading(true);
     const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
-    const { data: logins } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
+    
+    // Try to fetch login attempts, but don't fail if table doesn't exist
+    let logins: LoginAttempt[] = [];
+    try {
+      const { data } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
+      logins = data || [];
+    } catch (e) {
+      console.warn('login_attempts table not available');
+    }
     
     setLoading(false);
     if (regs) {
@@ -103,14 +111,7 @@ function RegistrationsTab() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'registrations' }, (payload) => {
         setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...r, ...payload.new as Registration } : r));
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'login_attempts' }, (payload) => {
-        const newLogin = payload.new as LoginAttempt;
-        setRegistrations((prev) => prev.map((r) => 
-          r.id === newLogin.registration_id 
-            ? { ...r, login_attempts: [newLogin, ...(r.login_attempts || [])] } 
-            : r
-        ));
-      })
+      // Note: login_attempts realtime subscription removed - table may not exist
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
     channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };
