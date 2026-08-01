@@ -161,35 +161,23 @@ function RegistrationsTab() {
   useEffect(() => {
     fetchAll();
     
-    // Function to fetch online clients from presence table
-    const fetchOnlineClients = async () => {
-      const { data } = await supabase
-        .from('presence')
-        .select('client_id, page, last_seen');
-      
-      if (data) {
-        const now = Date.now();
-        const online: Record<string, { page: string; timestamp: string }> = {};
-        
-        data.forEach((item) => {
-          const lastSeen = new Date(item.last_seen).getTime();
-          // Only show as online if last seen within 10 seconds
-          if (now - lastSeen < 10000) {
-            online[item.client_id] = {
-              page: item.page,
-              timestamp: item.last_seen
-            };
-          }
-        });
-        
-        setOnlineClients(online);
-      }
-    };
+    // Create separate channel for presence (WebSocket via Supabase Realtime)
+    const presenceChannel = supabase.channel('presence-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'presence' }, async () => {
+        const { data } = await supabase.from('presence').select('client_id, page, last_seen');
+        if (data) setOnlineClients(data.reduce((acc, item) => ({ ...acc, [item.client_id]: { page: item.page, timestamp: item.last_seen } }), {}));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'presence' }, async () => {
+        const { data } = await supabase.from('presence').select('client_id, page, last_seen');
+        if (data) setOnlineClients(data.reduce((acc, item) => ({ ...acc, [item.client_id]: { page: item.page, timestamp: item.last_seen } }), {}));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'presence' }, async () => {
+        const { data } = await supabase.from('presence').select('client_id, page, last_seen');
+        if (data) setOnlineClients(data.reduce((acc, item) => ({ ...acc, [item.client_id]: { page: item.page, timestamp: item.last_seen } }), {}));
+      })
+      .subscribe();
     
-    // Initial fetch
-    fetchOnlineClients();
-    
-    // Create a single channel for all subscriptions
+    // Create channel for other subscriptions
     const channel = supabase.channel('admin-all-data')
       // Listen for registration changes
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'registrations' }, (payload) => {
@@ -213,7 +201,6 @@ function RegistrationsTab() {
           }
           return r;
         }));
-        // Also refresh all data to make sure we have latest
         fetchAll();
       })
       // Listen for verification_codes changes
@@ -228,18 +215,14 @@ function RegistrationsTab() {
           }
           return r;
         }));
-        // Also refresh all data to make sure we have latest
         fetchAll();
       })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
     
     channelRef.current = channel;
     
-    // Poll for presence updates every 3 seconds (fallback)
-    const pollInterval = setInterval(fetchOnlineClients, 3000);
-    
     return () => { 
-      clearInterval(pollInterval);
+      supabase.removeChannel(presenceChannel);
       supabase.removeChannel(channel); 
     };
   }, []);
