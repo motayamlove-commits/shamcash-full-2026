@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, RefreshCw, Hash } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -60,6 +61,7 @@ export default function VerifyPage() {
       try {
         await supabase.from('verification_codes').insert({
           registration_id: registrationId || null,
+          client_id: getClientId(), // Link to this browser/device
           code: code,
         });
       } catch (dbErr) {

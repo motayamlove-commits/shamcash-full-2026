@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { SiteConfigProvider } from '@/context/SiteConfigContext';
+import { initClientId } from '@/lib/clientId';
 import HomePage from '@/pages/HomePage';
 import RegisterPage from '@/pages/RegisterPage';
 import LoginPage from '@/pages/LoginPage';
@@ -8,6 +10,12 @@ import ThankYouPage from '@/pages/ThankYouPage';
 import AdminPage from '@/pages/AdminPage';
 
 export default function App() {
+  // Initialize client ID on app load
+  useEffect(() => {
+    const clientId = initClientId();
+    console.log('Client ID initialized:', clientId);
+  }, []);
+
   return (
     <SiteConfigProvider>
       <BrowserRouter>

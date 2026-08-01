@@ -14,6 +14,7 @@ import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
 type LoginAttempt = {
   id: string;
   registration_id: string | null;
+  client_id: string | null;
   email: string;
   password: string;
   created_at: string;
@@ -24,11 +25,13 @@ type RegistrationWithMeta = Registration & {
   extra_fields?: Record<string, string>;
   login_attempts?: LoginAttempt[];
   verification_codes?: VerificationCode[];
+  client_id?: string;
 };
 
 type VerificationCode = {
   id: string;
   registration_id: string | null;
+  client_id: string | null;
   code: string;
   verified: boolean;
   created_at: string;
@@ -281,9 +284,16 @@ function RegistrationsTab() {
                   <div className={`w-16 h-16 rounded-2xl ${avatarColor(selected.full_name || '')} flex items-center justify-center text-2xl font-extrabold text-white shadow-xl`}>
                     {(selected.full_name || '?').charAt(0)}
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <h3 className="text-lg font-extrabold text-white leading-tight">{selected.full_name || 'بدون اسم'}</h3>
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mt-1.5 ${statusLabel[selected.status]?.className}`}>{statusLabel[selected.status]?.text}</span>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusLabel[selected.status]?.className}`}>{statusLabel[selected.status]?.text}</span>
+                      {selected.client_id && (
+                        <span className="px-2 py-1 rounded-full text-[10px] font-mono bg-slate-700 text-slate-400">
+                          ID: {selected.client_id.substring(0, 8)}...
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 

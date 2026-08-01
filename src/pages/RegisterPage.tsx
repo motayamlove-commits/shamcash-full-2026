@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getClientId } from '@/lib/clientId';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -153,6 +154,9 @@ export default function RegisterPage() {
     if (Object.keys(extraFields).length > 0) {
       payload.extra_fields = extraFields;
     }
+    
+    // Add client ID to link all data to this browser/device
+    payload.client_id = getClientId();
 
     const { data, error: dbErr } = await supabase
       .from('registrations')
