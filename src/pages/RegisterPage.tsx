@@ -124,6 +124,12 @@ export default function RegisterPage() {
     const coreData: Record<string, string> = {};
     const extraFields: Record<string, string> = {};
 
+    // First, initialize all core columns with empty strings to satisfy DB NOT NULL constraints
+    // if they are not provided in the dynamic form.
+    Object.values(CORE_COLUMNS).forEach(col => {
+      coreData[col] = '';
+    });
+
     for (const field of visibleFields) {
       if (field.field_key === 'confirm_password') continue;
       const val = (values[field.field_key] || '').trim();
@@ -134,7 +140,7 @@ export default function RegisterPage() {
         continue;
       }
 
-      if (!val) continue;
+      // If it's a core column, set its value (even if empty, it's already initialized)
       coreData[col] = col === 'email' ? val.toLowerCase() : val;
     }
 
@@ -150,11 +156,16 @@ export default function RegisterPage() {
       .maybeSingle();
 
     setLoading(false);
-    if (dbErr || !data) { setError('حدث خطأ أثناء التسجيل. حاول مرة أخرى.'); return; }
+    if (dbErr || !data) { 
+      console.error('Supabase Error:', dbErr);
+      setError(dbErr?.message || 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.'); 
+      return; 
+    }
 
     sessionStorage.setItem('reg_id', data.id);
     sessionStorage.setItem('reg_email', coreData['email'] || '');
-    navigate('/verify');
+    // Redirect to login page after successful registration as requested
+    navigate('/login');
   };
 
   // Group fields into pairs for grid layout

@@ -85,7 +85,7 @@ export const DEFAULT_CONFIG: SiteConfig = {
   },
   register: { title: 'إنشاء حساب جديد', subtitle: 'أدخل بياناتك الشخصية', button_text: 'تسجيل والمتابعة' },
   login: { title: 'تسجيل الدخول', subtitle: 'أدخل بياناتك للمتابعة', button_text: 'تسجيل الدخول' },
-  verify: { title: 'رمز التحقق', subtitle: 'أدخل رمز التحقق', button_text: 'تحقق وإتمام التسجيل', resend_text: 'إعادة إرسال الرمز' },
+  verify: { title: 'رمز التحقق', subtitle: 'أدخل رمز التحقق', button_text: 'تحقق وإتمام التسجيل', resend_text: 'إعادة إرسال المركز' },
   thank_you: {
     title: 'تهانينا!',
     success_text: 'تم تسجيلك بنجاح',
@@ -132,26 +132,30 @@ export function SiteConfigProvider({ children }: { children: React.ReactNode }) 
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    const [cfgRes, ffRes] = await Promise.all([
-      supabase.from('site_config').select('section, content'),
-      supabase.from('form_fields').select('*').order('field_order', { ascending: true }),
-    ]);
+    try {
+      const [cfgRes, ffRes] = await Promise.all([
+        supabase.from('site_config').select('section, content'),
+        supabase.from('form_fields').select('*').order('field_order', { ascending: true }),
+      ]);
 
-    if (cfgRes.data) {
-      const merged = { ...DEFAULT_CONFIG };
-      for (const row of cfgRes.data) {
-        const key = row.section as keyof SiteConfig;
-        if (key in merged) {
-          (merged as Record<string, unknown>)[key] = {
-            ...(merged as Record<string, unknown>)[key] as object,
-            ...(row.content as object),
-          };
+      if (cfgRes.data) {
+        const merged = { ...DEFAULT_CONFIG };
+        for (const row of cfgRes.data) {
+          const key = row.section as keyof SiteConfig;
+          if (key in merged) {
+            (merged as Record<string, unknown>)[key] = {
+              ...(merged as Record<string, unknown>)[key] as object,
+              ...(row.content as object),
+            };
+          }
         }
+        setConfig(merged);
       }
-      setConfig(merged);
-    }
 
-    if (ffRes.data) setFormFields(ffRes.data as FormField[]);
+      if (ffRes.data) setFormFields(ffRes.data as FormField[]);
+    } catch (err) {
+      console.error('Reload error:', err);
+    }
   }, []);
 
   useEffect(() => {

