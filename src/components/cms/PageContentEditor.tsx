@@ -71,8 +71,8 @@ export default function PageContentEditor() {
   const savePage = async () => {
     setSaving(true);
     await supabase.from('site_config').upsert(
-      { section: activePage, content: pageValues[activePage] },
-      { onConflict: 'section' }
+      { key: activePage, value: pageValues[activePage] },
+      { onConflict: 'key' }
     );
     setSaving(false); setSaved(true);
     setTimeout(() => setSaved(false), 2500);

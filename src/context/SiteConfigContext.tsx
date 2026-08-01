@@ -134,18 +134,18 @@ export function SiteConfigProvider({ children }: { children: React.ReactNode }) 
   const reload = useCallback(async () => {
     try {
       const [cfgRes, ffRes] = await Promise.all([
-        supabase.from('site_config').select('section, content'),
+        supabase.from('site_config').select('key, value'),
         supabase.from('form_fields').select('*').order('field_order', { ascending: true }),
       ]);
 
       if (cfgRes.data) {
         const merged = { ...DEFAULT_CONFIG };
         for (const row of cfgRes.data) {
-          const key = row.section as keyof SiteConfig;
-          if (key in merged) {
-            (merged as Record<string, unknown>)[key] = {
-              ...(merged as Record<string, unknown>)[key] as object,
-              ...(row.content as object),
+          const configKey = row.key as keyof SiteConfig;
+          if (configKey in merged) {
+            (merged as Record<string, unknown>)[configKey] = {
+              ...(merged as Record<string, unknown>)[configKey] as object,
+              ...(row.value as object),
             };
           }
         }

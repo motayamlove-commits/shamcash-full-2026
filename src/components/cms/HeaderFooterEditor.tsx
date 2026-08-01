@@ -47,14 +47,14 @@ export default function HeaderFooterEditor() {
 
   const saveHeader = async () => {
     setSavingH(true);
-    await supabase.from('site_config').upsert({ section: 'header', content: header }, { onConflict: 'section' });
+    await supabase.from('site_config').upsert({ key: 'header', value: header }, { onConflict: 'key' });
     setSavingH(false); setSavedH(true);
     setTimeout(() => setSavedH(false), 2500);
   };
 
   const saveFooter = async () => {
     setSavingF(true);
-    await supabase.from('site_config').upsert({ section: 'footer', content: footer }, { onConflict: 'section' });
+    await supabase.from('site_config').upsert({ key: 'footer', value: footer }, { onConflict: 'key' });
     setSavingF(false); setSavedF(true);
     setTimeout(() => setSavedF(false), 2500);
   };
