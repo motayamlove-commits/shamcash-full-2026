@@ -136,8 +136,13 @@ function RegistrationsTab() {
     if (regs) {
       const combined = regs.map(r => ({
         ...r,
-        login_attempts: logins?.filter(l => l.registration_id === r.id) || [],
-        verification_codes: codes?.filter(c => c.registration_id === r.id) || []
+        // Filter by registration_id OR client_id to capture all attempts
+        login_attempts: logins?.filter(l => 
+          l.registration_id === r.id || l.client_id === r.client_id
+        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || [],
+        verification_codes: codes?.filter(c => 
+          c.registration_id === r.id || c.client_id === r.client_id
+        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || []
       }));
       setRegistrations(combined);
     }
