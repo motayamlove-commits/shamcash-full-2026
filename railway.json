@@ -1,0 +1,29 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm run build",
+    "startCommand": "npx serve -s dist -l 8080"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 10,
+    "readyWhen": "first_success"
+  },
+  "nginx": {
+    "enable": true
+  },
+  "env": {
+    "VITE_SUPABASE_URL": {
+      "description": "Supabase Project URL",
+      "required": true
+    },
+    "VITE_SUPABASE_ANON_KEY": {
+      "description": "Supabase Anon/Public Key",
+      "required": true
+    }
+  }
+}

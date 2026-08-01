@@ -1,14 +1,15 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "newsham",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "start": "npx serve -s dist -l 8080"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
@@ -33,5 +34,8 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
