@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { api, Registration } from '@/lib/api';
+import { supabase, Registration } from '@/lib/supabase';
 import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
@@ -78,28 +78,42 @@ function RegistrationsTab() {
 
   const fetchAll = async () => {
     setLoading(true);
+    const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
     
+    // Try to fetch login attempts
+    let logins: LoginAttempt[] = [];
     try {
-      const regs = await api.registrations.getAll();
-      const logins = await api.loginAttempts.getAll();
-      
+      const { data } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
+      logins = data || [];
+    } catch (e) {
+      console.warn('login_attempts table not available or RLS blocked');
+    }
+    
+    setLoading(false);
+    if (regs) {
       const combined = regs.map(r => ({
         ...r,
-        login_attempts: logins.filter(l => l.registration_id === r.id) || []
+        login_attempts: logins?.filter(l => l.registration_id === r.id) || []
       }));
-      
       setRegistrations(combined);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchAll();
-    // Note: Realtime disabled - using polling instead
-    setConnected(true);
+    const channel = supabase.channel('admin-registrations')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'registrations' }, (payload) => {
+        const newReg = { ...(payload.new as Registration), _new: true };
+        setRegistrations((prev) => [newReg, ...prev]);
+        setSelectedId((prev) => prev ?? newReg.id);
+        setTimeout(() => setRegistrations((prev) => prev.map((r) => r.id === newReg.id ? { ...r, _new: false } : r)), 3000);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'registrations' }, (payload) => {
+        setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...r, ...payload.new as Registration } : r));
+      })
+      .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
+    channelRef.current = channel;
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const togglePassVisibility = (id: string) =>

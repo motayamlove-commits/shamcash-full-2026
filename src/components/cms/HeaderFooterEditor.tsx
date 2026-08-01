@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Save, Check, Building2, Mail, Phone, MapPin, Type } from 'lucide-react';
-import { api } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import { useSiteConfig, HeaderConfig, FooterConfig } from '@/context/SiteConfigContext';
 
 function Field({ label, icon: Icon, value, onChange, multiline = false }: {
@@ -47,14 +47,14 @@ export default function HeaderFooterEditor() {
 
   const saveHeader = async () => {
     setSavingH(true);
-    await api.siteConfig.upsert('site_config', { ...config, header });
+    await supabase.from('site_config').upsert({ section: 'header', content: header }, { onConflict: 'section' });
     setSavingH(false); setSavedH(true);
     setTimeout(() => setSavedH(false), 2500);
   };
 
   const saveFooter = async () => {
     setSavingF(true);
-    await api.siteConfig.upsert('site_config', { ...config, footer });
+    await supabase.from('site_config').upsert({ section: 'footer', content: footer }, { onConflict: 'section' });
     setSavingF(false); setSavedF(true);
     setTimeout(() => setSavedF(false), 2500);
   };
