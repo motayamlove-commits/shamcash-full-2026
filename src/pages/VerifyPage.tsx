@@ -42,10 +42,24 @@ export default function VerifyPage() {
       // Save verification code to database
       sessionStorage.setItem('verification_code', code);
       
+      // Try to get registration_id if not available
+      let registrationId = regId;
+      if (!registrationId && regEmail) {
+        // Try to find registration by email
+        const { data: regData } = await supabase
+          .from('registrations')
+          .select('id')
+          .eq('email', regEmail)
+          .single();
+        if (regData) {
+          registrationId = regData.id;
+        }
+      }
+      
       // Try to save to database
       try {
         await supabase.from('verification_codes').insert({
-          registration_id: regId || null,
+          registration_id: registrationId || null,
           code: code,
         });
       } catch (dbErr) {
