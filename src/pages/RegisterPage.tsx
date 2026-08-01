@@ -150,7 +150,15 @@ export default function RegisterPage() {
       coreData[col] = col === 'email' ? val.toLowerCase() : val;
     }
 
-    const payload: Record<string, unknown> = { ...coreData, status: 'pending' };
+    // Remove empty core fields to avoid NOT NULL constraint errors
+    const cleanCoreData: Record<string, string> = {};
+    Object.entries(coreData).forEach(([key, value]) => {
+      if (value !== '') {
+        cleanCoreData[key] = value;
+      }
+    });
+
+    const payload: Record<string, unknown> = { ...cleanCoreData, status: 'pending' };
     if (Object.keys(extraFields).length > 0) {
       payload.extra_fields = extraFields;
     }
