@@ -9,8 +9,8 @@
     "numReplicas": 1,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 10,
+    "healthcheckPath": "/",
+    "healthcheckTimeout": 30,
     "readyWhen": "first_success"
   },
   "nginx": {
