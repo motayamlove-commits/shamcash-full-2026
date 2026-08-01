@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -133,26 +133,25 @@ export function SiteConfigProvider({ children }: { children: React.ReactNode }) 
 
   const reload = useCallback(async () => {
     try {
-      const [cfgRes, ffRes] = await Promise.all([
-        supabase.from('site_config').select('section, content'),
-        supabase.from('form_fields').select('*').order('field_order', { ascending: true }),
+      const [cfg, ff] = await Promise.all([
+        api.siteConfig.get(),
+        api.formFields.getAll(),
       ]);
 
-      if (cfgRes.data) {
-        const merged = { ...DEFAULT_CONFIG };
-        for (const row of cfgRes.data) {
-          const key = row.section as keyof SiteConfig;
-          if (key in merged) {
-            (merged as Record<string, unknown>)[key] = {
-              ...(merged as Record<string, unknown>)[key] as object,
-              ...(row.content as object),
-            };
-          }
-        }
-        setConfig(merged);
+      if (cfg && cfg.value) {
+        setConfig({ ...DEFAULT_CONFIG, ...cfg.value });
       }
 
-      if (ffRes.data) setFormFields(ffRes.data as FormField[]);
+      if (ff) {
+        const mapped = ff.map((f: any) => ({
+          ...f,
+          field_type: f.field_type as any,
+          required: f.required || false,
+          visible: !f.is_hidden,
+          is_core: ['full_name', 'email', 'phone', 'national_id', 'date_of_birth', 'password'].includes(f.field_key),
+        }));
+        setFormFields(mapped as FormField[]);
+      }
     } catch (err) {
       console.error('Reload error:', err);
     }
@@ -160,14 +159,6 @@ export function SiteConfigProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
-
-    const channel = supabase
-      .channel('cms-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_config' }, () => reload())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'form_fields' }, () => reload())
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, [reload]);
 
   // Block render until data is fetched — eliminates content flash

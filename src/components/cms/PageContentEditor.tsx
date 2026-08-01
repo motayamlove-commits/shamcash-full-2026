@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Save, Check, Image, Type, FileText } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useSiteConfig, SiteConfig } from '@/context/SiteConfigContext';
 
 type PageKey = 'home' | 'register' | 'login' | 'verify' | 'thank_you';
@@ -70,10 +70,7 @@ export default function PageContentEditor() {
 
   const savePage = async () => {
     setSaving(true);
-    await supabase.from('site_config').upsert(
-      { section: activePage, content: pageValues[activePage] },
-      { onConflict: 'section' }
-    );
+    await api.siteConfig.upsert('site_config', { ...config, [activePage]: pageValues[activePage] });
     setSaving(false); setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };

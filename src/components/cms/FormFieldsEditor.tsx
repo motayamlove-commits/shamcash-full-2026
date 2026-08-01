@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X, ChevronUp, ChevronDown, Eye, EyeOff, Lock, GripVertical, RefreshCw } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 
 const FIELD_TYPES = [
@@ -49,7 +49,7 @@ export default function FormFieldsEditor() {
   const saveEdit = async (f: FormField) => {
     setSaving(f.id);
     try {
-      await supabase.from('form_fields').update(editValues).eq('id', f.id);
+      await api.formFields.update(f.id, editValues);
       setEditingId(null);
     } catch (err) {
       alert('فشل حفظ التعديل');
@@ -61,7 +61,7 @@ export default function FormFieldsEditor() {
   const toggleVisible = async (f: FormField) => {
     setSaving(f.id);
     try {
-      await supabase.from('form_fields').update({ is_hidden: !f.is_hidden }).eq('id', f.id);
+      await api.formFields.update(f.id, { is_hidden: !f.is_hidden });
     } catch (err) {
       alert('فشل تغيير الحالة');
     } finally {
@@ -77,8 +77,8 @@ export default function FormFieldsEditor() {
     setSaving(f.id);
     try {
       await Promise.all([
-        supabase.from('form_fields').update({ field_order: other.field_order }).eq('id', f.id),
-        supabase.from('form_fields').update({ field_order: f.field_order }).eq('id', other.id),
+        api.formFields.update(f.id, { field_order: other.field_order }),
+        api.formFields.update(other.id, { field_order: f.field_order }),
       ]);
     } catch (err) {
       alert('فشل إعادة الترتيب');
@@ -90,7 +90,7 @@ export default function FormFieldsEditor() {
   const deleteField = async (id: string) => {
     setSaving(id);
     try {
-      await supabase.from('form_fields').delete().eq('id', id);
+      await api.formFields.delete(id);
       setDeleteConfirm(null);
     } catch (err) {
       alert('فشل حذف الحقل');
@@ -105,7 +105,7 @@ export default function FormFieldsEditor() {
     const maxOrder = fields.length > 0 ? Math.max(...fields.map((f) => f.field_order)) + 1 : 1;
     setSaving('new');
     try {
-      await supabase.from('form_fields').insert({
+      await api.formFields.create({
         page_key: 'register',
         field_key: key,
         field_type: newField.field_type,

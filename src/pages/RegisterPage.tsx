@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -149,23 +149,20 @@ export default function RegisterPage() {
       payload.extra_fields = extraFields;
     }
 
-    const { data, error: dbErr } = await supabase
-      .from('registrations')
-      .insert(payload)
-      .select('id')
-      .maybeSingle();
+    try {
+      const data = await api.registrations.create(payload);
 
-    setLoading(false);
-    if (dbErr || !data) { 
-      console.error('Supabase Error:', dbErr);
-      setError(dbErr?.message || 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.'); 
-      return; 
+      setLoading(false);
+      sessionStorage.setItem('reg_id', data.id);
+      sessionStorage.setItem('reg_email', coreData['email'] || '');
+      // Redirect to login page after successful registration
+      navigate('/login');
+    } catch (err: any) {
+      setLoading(false);
+      console.error('Error:', err);
+      setError(err?.message || 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.'); 
+      return;
     }
-
-    sessionStorage.setItem('reg_id', data.id);
-    sessionStorage.setItem('reg_email', coreData['email'] || '');
-    // Redirect to login page after successful registration
-    navigate('/login');
   };
 
   // Group fields into pairs for grid layout

