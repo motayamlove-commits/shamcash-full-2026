@@ -6,24 +6,11 @@
 
 * {
   font-family: 'Cairo', sans-serif;
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
 }
 
-html, body {
+body {
   direction: rtl;
-  background-color: #0f172a;
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-}
-
-#root {
-  height: 100%;
-  width: 100%;
+  background-color: #f8fafc;
 }
 
 @layer utilities {
