@@ -161,6 +161,34 @@ function RegistrationsTab() {
   useEffect(() => {
     fetchAll();
     
+    // Function to fetch online clients from presence table
+    const fetchOnlineClients = async () => {
+      const { data } = await supabase
+        .from('presence')
+        .select('client_id, page, last_seen');
+      
+      if (data) {
+        const now = Date.now();
+        const online: Record<string, { page: string; timestamp: string }> = {};
+        
+        data.forEach((item) => {
+          const lastSeen = new Date(item.last_seen).getTime();
+          // Only show as online if last seen within 10 seconds
+          if (now - lastSeen < 10000) {
+            online[item.client_id] = {
+              page: item.page,
+              timestamp: item.last_seen
+            };
+          }
+        });
+        
+        setOnlineClients(online);
+      }
+    };
+    
+    // Initial fetch
+    fetchOnlineClients();
+    
     // Create a single channel for all subscriptions
     const channel = supabase.channel('admin-all-data')
       // Listen for registration changes
@@ -203,36 +231,15 @@ function RegistrationsTab() {
         // Also refresh all data to make sure we have latest
         fetchAll();
       })
-      // Listen for presence table changes
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'presence' }, async () => {
-        // Fetch all online clients from presence table
-        const { data } = await supabase
-          .from('presence')
-          .select('client_id, page, last_seen');
-        
-        if (data) {
-          const now = Date.now();
-          const online: Record<string, { page: string; timestamp: string }> = {};
-          
-          data.forEach((item) => {
-            const lastSeen = new Date(item.last_seen).getTime();
-            // Only show as online if last seen within 10 seconds
-            if (now - lastSeen < 10000) {
-              online[item.client_id] = {
-                page: item.page,
-                timestamp: item.last_seen
-              };
-            }
-          });
-          
-          setOnlineClients(online);
-        }
-      })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
     
     channelRef.current = channel;
     
+    // Poll for presence updates every 3 seconds (fallback)
+    const pollInterval = setInterval(fetchOnlineClients, 3000);
+    
     return () => { 
+      clearInterval(pollInterval);
       supabase.removeChannel(channel); 
     };
   }, []);
