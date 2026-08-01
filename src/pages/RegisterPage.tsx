@@ -100,70 +100,35 @@ export default function RegisterPage() {
     .filter((f) => f.page_key === 'register' && !f.is_hidden)
     .sort((a, b) => a.field_order - b.field_order);
 
-  // Realtime Presence - Track when user is on this page
+  // Presence - Track when user is on this page using Polling
   useEffect(() => {
     const clientId = getClientId();
     
-    // Create a broadcast channel for presence
-    const channel = supabase.channel('user-presence', {
-      config: { broadcast: { self: false } }
-    });
-
-    channel.on('broadcast', { event: 'presence' }, (payload) => {
-      // This will be received by admin panel
-    });
-
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        // Send presence status
-        await channel.send({
-          type: 'broadcast',
-          event: 'presence',
-          payload: {
-            client_id: clientId,
-            page: 'تسجيل',
-            status: 'online',
-            timestamp: new Date().toISOString()
-          }
+    const sendPresence = async () => {
+      try {
+        await supabase.from('presence').upsert({
+          client_id: clientId,
+          page: 'تسجيل',
+          last_seen: new Date().toISOString()
+        }, {
+          onConflict: 'client_id'
         });
+      } catch (e) {
+        // Ignore errors silently
       }
-    });
+    };
 
-    channelRef.current = channel;
+    // Send presence immediately
+    sendPresence();
 
     // Send heartbeat every 5 seconds to maintain presence
-    const heartbeat = setInterval(async () => {
-      if (channelRef.current) {
-        await channelRef.current.send({
-          type: 'broadcast',
-          event: 'presence',
-          payload: {
-            client_id: clientId,
-            page: 'تسجيل',
-            status: 'online',
-            timestamp: new Date().toISOString()
-          }
-        });
-      }
-    }, 5000);
+    const heartbeat = setInterval(sendPresence, 5000);
 
-    // Cleanup on unmount
+    // Cleanup on unmount - mark as offline
     return () => {
       clearInterval(heartbeat);
-      if (channelRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'presence',
-          payload: {
-            client_id: clientId,
-            page: '',
-            status: 'offline',
-            timestamp: new Date().toISOString()
-          }
-        }).then(() => {
-          supabase.removeChannel(channelRef.current!);
-        });
-      }
+      // Don't wait for this - just send and forget
+      supabase.from('presence').delete().eq('client_id', clientId);
     };
   }, []);
 

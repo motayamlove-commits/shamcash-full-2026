@@ -203,50 +203,36 @@ function RegistrationsTab() {
         // Also refresh all data to make sure we have latest
         fetchAll();
       })
-      // Listen for presence broadcasts
-      .on('broadcast', { event: 'presence' }, (payload) => {
-        const { client_id, page, status } = payload.payload;
+      // Listen for presence table changes
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'presence' }, async () => {
+        // Fetch all online clients from presence table
+        const { data } = await supabase
+          .from('presence')
+          .select('client_id, page, last_seen');
         
-        if (status === 'offline') {
-          // Remove client from online list
-          setOnlineClients((prev) => {
-            const updated = { ...prev };
-            delete updated[client_id];
-            return updated;
+        if (data) {
+          const now = Date.now();
+          const online: Record<string, { page: string; timestamp: string }> = {};
+          
+          data.forEach((item) => {
+            const lastSeen = new Date(item.last_seen).getTime();
+            // Only show as online if last seen within 10 seconds
+            if (now - lastSeen < 10000) {
+              online[item.client_id] = {
+                page: item.page,
+                timestamp: item.last_seen
+              };
+            }
           });
-        } else {
-          // Add/update client in online list
-          setOnlineClients((prev) => ({
-            ...prev,
-            [client_id]: { page, timestamp: new Date().toISOString() }
-          }));
+          
+          setOnlineClients(online);
         }
       })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
     
     channelRef.current = channel;
     
-    // Cleanup offline clients every 10 seconds (if no heartbeat received)
-    const cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      setOnlineClients((prev) => {
-        const updated: typeof prev = {};
-        let changed = false;
-        Object.entries(prev).forEach(([clientId, data]) => {
-          const lastSeen = new Date(data.timestamp).getTime();
-          // Remove if no heartbeat for 10 seconds
-          if (now - lastSeen < 10000) {
-            updated[clientId] = data;
-          } else {
-            changed = true;
-          }
-        });
-        return changed ? updated : prev;
-      });
-    }, 10000);
-    
     return () => { 
-      clearInterval(cleanupInterval);
       supabase.removeChannel(channel); 
     };
   }, []);
