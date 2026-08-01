@@ -164,8 +164,8 @@ export default function RegisterPage() {
 
     sessionStorage.setItem('reg_id', data.id);
     sessionStorage.setItem('reg_email', coreData['email'] || '');
-    // Redirect to login page after successful registration as requested
-    navigate('/login');
+    // Redirect to verify page after successful registration
+    navigate('/verify');
   };
 
   // Group fields into pairs for grid layout
