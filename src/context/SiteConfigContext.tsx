@@ -55,7 +55,7 @@ export type FormField = {
   id: string;
   page_key: string;
   field_key: string;
-  field_type: 'text' | 'email' | 'tel' | 'date' | 'password' | 'number' | 'textarea';
+  field_type: 'text' | 'email' | 'tel' | 'date' | 'password' | 'number' | 'textarea' | 'select';
   label: string;
   placeholder: string;
   required: boolean;

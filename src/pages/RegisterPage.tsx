@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
@@ -24,6 +24,11 @@ const FIELD_ICONS: Record<string, React.ElementType> = {
   date_of_birth: Calendar,
   password: Lock,
   confirm_password: Lock,
+  loan_type: Briefcase,
+  loan_amount: DollarSign,
+  salary: Banknote,
+  job_title: Briefcase,
+  city: MapPin,
 };
 
 function FieldInput({
