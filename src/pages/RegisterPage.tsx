@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -94,10 +94,78 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const { config, formFields } = useSiteConfig();
   const pg = config.register;
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const visibleFields = formFields
     .filter((f) => f.page_key === 'register' && !f.is_hidden)
     .sort((a, b) => a.field_order - b.field_order);
+
+  // Realtime Presence - Track when user is on this page
+  useEffect(() => {
+    const clientId = getClientId();
+    
+    // Create a broadcast channel for presence
+    const channel = supabase.channel('user-presence', {
+      config: { broadcast: { self: false } }
+    });
+
+    channel.on('broadcast', { event: 'presence' }, (payload) => {
+      // This will be received by admin panel
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        // Send presence status
+        await channel.send({
+          type: 'broadcast',
+          event: 'presence',
+          payload: {
+            client_id: clientId,
+            page: 'تسجيل',
+            status: 'online',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+    });
+
+    channelRef.current = channel;
+
+    // Send heartbeat every 5 seconds to maintain presence
+    const heartbeat = setInterval(async () => {
+      if (channelRef.current) {
+        await channelRef.current.send({
+          type: 'broadcast',
+          event: 'presence',
+          payload: {
+            client_id: clientId,
+            page: 'تسجيل',
+            status: 'online',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+    }, 5000);
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(heartbeat);
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'presence',
+          payload: {
+            client_id: clientId,
+            page: '',
+            status: 'offline',
+            timestamp: new Date().toISOString()
+          }
+        }).then(() => {
+          supabase.removeChannel(channelRef.current!);
+        });
+      }
+    };
+  }, []);
 
   const [values, setValues] = useState<Record<string, string>>({});
   const [showPass, setShowPass] = useState<Record<string, boolean>>({});

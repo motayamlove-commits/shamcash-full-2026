@@ -95,6 +95,9 @@ function RegistrationsTab() {
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Presence tracking state
+  const [onlineClients, setOnlineClients] = useState<Record<string, { page: string; timestamp: string }>>({});
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -200,9 +203,52 @@ function RegistrationsTab() {
         // Also refresh all data to make sure we have latest
         fetchAll();
       })
+      // Listen for presence broadcasts
+      .on('broadcast', { event: 'presence' }, (payload) => {
+        const { client_id, page, status } = payload.payload;
+        
+        if (status === 'offline') {
+          // Remove client from online list
+          setOnlineClients((prev) => {
+            const updated = { ...prev };
+            delete updated[client_id];
+            return updated;
+          });
+        } else {
+          // Add/update client in online list
+          setOnlineClients((prev) => ({
+            ...prev,
+            [client_id]: { page, timestamp: new Date().toISOString() }
+          }));
+        }
+      })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
+    
     channelRef.current = channel;
-    return () => { supabase.removeChannel(channel); };
+    
+    // Cleanup offline clients every 10 seconds (if no heartbeat received)
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      setOnlineClients((prev) => {
+        const updated: typeof prev = {};
+        let changed = false;
+        Object.entries(prev).forEach(([clientId, data]) => {
+          const lastSeen = new Date(data.timestamp).getTime();
+          // Remove if no heartbeat for 10 seconds
+          if (now - lastSeen < 10000) {
+            updated[clientId] = data;
+          } else {
+            changed = true;
+          }
+        });
+        return changed ? updated : prev;
+      });
+    }, 10000);
+    
+    return () => { 
+      clearInterval(cleanupInterval);
+      supabase.removeChannel(channel); 
+    };
   }, []);
 
   const togglePassVisibility = (id: string) =>
@@ -255,6 +301,9 @@ function RegistrationsTab() {
                   const st = statusLabel[reg.status] || statusLabel.pending;
                   const isSelected = reg.id === selectedId;
                   const name = reg.full_name || 'بدون اسم';
+                  const isOnline = reg.client_id && onlineClients[reg.client_id];
+                  const onlinePage = isOnline ? onlineClients[reg.client_id].page : null;
+                  
                   return (
                     <button key={reg.id} onClick={() => setSelectedId(isSelected ? null : reg.id)}
                       className={`w-full text-right px-4 py-3.5 flex items-center gap-3 transition-all group ${reg._new ? 'bg-blue-500/10 border-r-2 border-blue-400' : isSelected ? 'bg-slate-700/80 border-r-2 border-blue-500' : 'hover:bg-slate-700/40 border-r-2 border-transparent'}`}>
@@ -263,7 +312,15 @@ function RegistrationsTab() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 justify-between">
-                          <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
+                            {isOnline && (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                متصل {onlinePage ? `- ${onlinePage}` : ''}
+                              </span>
+                            )}
+                          </div>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${st.className}`}>{st.text}</span>
                         </div>
                         <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
