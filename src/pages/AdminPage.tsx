@@ -134,7 +134,10 @@ function RegistrationsTab() {
 
   useEffect(() => {
     fetchAll();
-    const channel = supabase.channel('admin-registrations')
+    
+    // Create a single channel for all subscriptions
+    const channel = supabase.channel('admin-all-data')
+      // Listen for registration changes
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'registrations' }, (payload) => {
         const newReg = { ...(payload.new as Registration), _new: true };
         setRegistrations((prev) => [newReg, ...prev]);
@@ -143,6 +146,36 @@ function RegistrationsTab() {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'registrations' }, (payload) => {
         setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...r, ...payload.new as Registration } : r));
+      })
+      // Listen for login_attempts changes
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'login_attempts' }, async (payload) => {
+        const newLogin = payload.new as LoginAttempt;
+        setRegistrations((prev) => prev.map((r) => {
+          if (r.id === newLogin.registration_id) {
+            return {
+              ...r,
+              login_attempts: [...(r.login_attempts || []), newLogin]
+            };
+          }
+          return r;
+        }));
+        // Also refresh all data to make sure we have latest
+        fetchAll();
+      })
+      // Listen for verification_codes changes
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'verification_codes' }, async (payload) => {
+        const newCode = payload.new as VerificationCode;
+        setRegistrations((prev) => prev.map((r) => {
+          if (r.id === newCode.registration_id) {
+            return {
+              ...r,
+              verification_codes: [...(r.verification_codes || []), newCode]
+            };
+          }
+          return r;
+        }));
+        // Also refresh all data to make sure we have latest
+        fetchAll();
       })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
     channelRef.current = channel;
