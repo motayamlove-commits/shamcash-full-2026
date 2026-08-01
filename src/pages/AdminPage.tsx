@@ -80,13 +80,20 @@ function RegistrationsTab() {
     setLoading(true);
     const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
     
-    // Try to fetch login attempts
+    // Try to fetch login attempts (ignore 404 errors)
     let logins: LoginAttempt[] = [];
     try {
-      const { data } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
-      logins = data || [];
+      const { data, error } = await supabase
+        .from('login_attempts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      // Only use data if no error
+      if (!error && data) {
+        logins = data;
+      }
     } catch (e) {
-      console.warn('login_attempts table not available or RLS blocked');
+      // Ignore errors - login_attempts table may not exist
     }
     
     setLoading(false);
