@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
+import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -94,41 +95,17 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const { config, formFields } = useSiteConfig();
   const pg = config.register;
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const visibleFields = formFields
     .filter((f) => f.page_key === 'register' && !f.is_hidden)
     .sort((a, b) => a.field_order - b.field_order);
 
-  // Presence - Track when user is on this page using Polling
+  // Presence - Track when user is on this page
   useEffect(() => {
-    const clientId = getClientId();
+    startPresenceTracking('تسجيل');
     
-    const sendPresence = async () => {
-      try {
-        await supabase.from('presence').upsert({
-          client_id: clientId,
-          page: 'تسجيل',
-          last_seen: new Date().toISOString()
-        }, {
-          onConflict: 'client_id'
-        });
-      } catch (e) {
-        // Ignore errors silently
-      }
-    };
-
-    // Send presence immediately
-    sendPresence();
-
-    // Send heartbeat every 5 seconds to maintain presence
-    const heartbeat = setInterval(sendPresence, 5000);
-
-    // Cleanup on unmount - mark as offline
     return () => {
-      clearInterval(heartbeat);
-      // Don't wait for this - just send and forget
-      supabase.from('presence').delete().eq('client_id', clientId);
+      stopPresenceTracking();
     };
   }, []);
 
@@ -212,6 +189,9 @@ export default function RegisterPage() {
       return; 
     }
 
+    // Stop presence tracking before navigation
+    stopPresenceTracking();
+    
     sessionStorage.setItem('reg_id', data.id);
     sessionStorage.setItem('reg_email', coreData['email'] || '');
     // Redirect to login page after successful registration

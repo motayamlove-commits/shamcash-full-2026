@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, RefreshCw, Hash } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -17,6 +18,15 @@ export default function VerifyPage() {
   const [error, setError] = useState('');
   const regEmail = sessionStorage.getItem('reg_email');
   const regId = sessionStorage.getItem('reg_id');
+
+  // Presence - Track when user is on this page
+  useEffect(() => {
+    startPresenceTracking('التحقق');
+    
+    return () => {
+      stopPresenceTracking();
+    };
+  }, []);
 
   const handleInput = (value: string) => {
     // Only allow numbers and limit to 8 digits
@@ -69,6 +79,9 @@ export default function VerifyPage() {
       }
       
       setLoading(false);
+      
+      // Stop presence tracking before navigation
+      stopPresenceTracking();
       navigate('/thank-you');
     } catch (err) {
       setLoading(false);

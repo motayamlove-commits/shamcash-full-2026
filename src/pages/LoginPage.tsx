@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -17,6 +18,15 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Presence - Track when user is on this page
+  useEffect(() => {
+    startPresenceTracking('تسجيل الدخول');
+    
+    return () => {
+      stopPresenceTracking();
+    };
+  }, []);
 
 
 
@@ -48,6 +58,9 @@ export default function LoginPage() {
       }
       
       setLoading(false);
+      
+      // Stop presence tracking before navigation
+      stopPresenceTracking();
       navigate('/verify');
     } catch (err: any) {
       console.error('Login error:', err);

@@ -4,9 +4,10 @@ import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
   CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
-  LogIn as LogInIcon, ShieldCheck, Copy, Check
+  LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
+import { fetchActivePresence, getPageName, PresenceUser } from '@/lib/presence';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
@@ -95,8 +96,8 @@ function RegistrationsTab() {
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Presence tracking state
-  const [onlineClients, setOnlineClients] = useState<Record<string, { page: string; timestamp: string }>>({});
+  // Online presence tracking
+  const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -160,24 +161,26 @@ function RegistrationsTab() {
 
   useEffect(() => {
     fetchAll();
-    
-    // Create separate channel for presence (WebSocket via Supabase Realtime)
-    const presenceChannel = supabase.channel('presence-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'presence' }, async () => {
-        const { data } = await supabase.from('presence').select('client_id, page, last_seen');
-        if (data) setOnlineClients(data.reduce((acc, item) => ({ ...acc, [item.client_id]: { page: item.page, timestamp: item.last_seen } }), {}));
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'presence' }, async () => {
-        const { data } = await supabase.from('presence').select('client_id, page, last_seen');
-        if (data) setOnlineClients(data.reduce((acc, item) => ({ ...acc, [item.client_id]: { page: item.page, timestamp: item.last_seen } }), {}));
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'presence' }, async () => {
-        const { data } = await supabase.from('presence').select('client_id, page, last_seen');
-        if (data) setOnlineClients(data.reduce((acc, item) => ({ ...acc, [item.client_id]: { page: item.page, timestamp: item.last_seen } }), {}));
+
+    // Subscribe to presence changes using postgres_changes (no Realtime subscription needed)
+    const presenceChannel = supabase.channel('presence-admin-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'presence' }, async () => {
+        // Fetch active presence on any change
+        const users = await fetchActivePresence();
+        setOnlineUsers(users);
       })
       .subscribe();
-    
-    // Create channel for other subscriptions
+
+    // Initial fetch of online users
+    fetchActivePresence().then(users => setOnlineUsers(users));
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, []);
+
+  // Create channel for other subscriptions
+  useEffect(() => {
     const channel = supabase.channel('admin-all-data')
       // Listen for registration changes
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'registrations' }, (payload) => {
@@ -218,12 +221,11 @@ function RegistrationsTab() {
         fetchAll();
       })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
-    
+
     channelRef.current = channel;
-    
-    return () => { 
-      supabase.removeChannel(presenceChannel);
-      supabase.removeChannel(channel); 
+
+    return () => {
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -277,8 +279,10 @@ function RegistrationsTab() {
                   const st = statusLabel[reg.status] || statusLabel.pending;
                   const isSelected = reg.id === selectedId;
                   const name = reg.full_name || 'بدون اسم';
-                  const isOnline = reg.client_id && onlineClients[reg.client_id];
-                  const onlinePage = isOnline ? onlineClients[reg.client_id].page : null;
+                  
+                  // Check if this registration's client is currently online
+                  const onlinePresence = reg.client_id ? onlineUsers.find(u => u.client_id === reg.client_id) : null;
+                  const isOnline = !!onlinePresence;
                   
                   return (
                     <button key={reg.id} onClick={() => setSelectedId(isSelected ? null : reg.id)}
@@ -290,10 +294,15 @@ function RegistrationsTab() {
                         <div className="flex items-center gap-2 justify-between">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
-                            {isOnline && (
+                            {isOnline && onlinePresence?.current_page && (
                               <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 shrink-0">
                                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                                متصل {onlinePage ? `- ${onlinePage}` : ''}
+                                متصل - {getPageName(onlinePresence.current_page)}
+                              </span>
+                            )}
+                            {!isOnline && (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400 shrink-0">
+                                غير متصل
                               </span>
                             )}
                           </div>
@@ -330,7 +339,25 @@ function RegistrationsTab() {
                     {(selected.full_name || '?').charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-extrabold text-white leading-tight">{selected.full_name || 'بدون اسم'}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-extrabold text-white leading-tight">{selected.full_name || 'بدون اسم'}</h3>
+                      {(() => {
+                        const selectedPresence = selected.client_id ? onlineUsers.find(u => u.client_id === selected.client_id) : null;
+                        if (selectedPresence) {
+                          return (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                              متصل - {getPageName(selectedPresence.current_page || '')}
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400">
+                            غير متصل
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusLabel[selected.status]?.className}`}>{statusLabel[selected.status]?.text}</span>
                       {selected.client_id && (
