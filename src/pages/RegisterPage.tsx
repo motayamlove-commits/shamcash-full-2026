@@ -95,7 +95,7 @@ export default function RegisterPage() {
   const pg = config.register;
 
   const visibleFields = formFields
-    .filter((f) => f.page_key === 'register' && f.visible)
+    .filter((f) => f.page_key === 'register' && !f.is_hidden)
     .sort((a, b) => a.field_order - b.field_order);
 
   const [values, setValues] = useState<Record<string, string>>({});

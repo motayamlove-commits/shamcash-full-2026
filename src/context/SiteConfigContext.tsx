@@ -60,7 +60,7 @@ export type FormField = {
   placeholder: string;
   required: boolean;
   field_order: number;
-  visible: boolean;
+  is_hidden: boolean;
   is_core: boolean;
 };
 
