@@ -214,10 +214,10 @@ function RegistrationsTab() {
     <div className="flex flex-col flex-1 overflow-hidden text-right" dir="rtl">
 
       {/* ── Split panel ── */}
-      <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden min-h-0">
 
         {/* ── LEFT: Registration list (40%) ── */}
-        <div className="w-[40%] flex flex-col bg-slate-800 border border-slate-700 overflow-hidden p-0 m-0 rounded-none">
+        <div className="w-[40%] flex flex-col bg-slate-800 border-l border-slate-700 overflow-hidden">
           <div className="shrink-0 px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <Activity className="w-4 h-4 text-blue-400 shrink-0" />
@@ -270,7 +270,7 @@ function RegistrationsTab() {
         </div>
 
         {/* ── RIGHT: Detail panel (60%) ── */}
-        <div className="w-3/5 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-slate-800 overflow-hidden">
           <div className="shrink-0 px-5 py-3.5 border-b border-slate-700 flex items-center gap-2">
             <Shield className="w-4 h-4 text-blue-400" />
             <h2 className="font-bold text-white text-sm">{selected ? `تفاصيل: ${selected.full_name || 'المستخدم'}` : 'تفاصيل المستخدم'}</h2>
