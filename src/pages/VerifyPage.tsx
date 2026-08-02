@@ -144,7 +144,6 @@ export default function VerifyPage() {
                   placeholder="••••••"
                   className="w-full text-center text-2xl font-bold tracking-[0.5em] border-2 border-slate-200 rounded-2xl py-4 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all ltr placeholder:tracking-normal"
                 />
-                <p className="text-center text-xs text-slate-500">الحد الأدنى 4 أرقام — الحد الأقصى 8 أرقام</p>
               </div>
 
               {error && (
