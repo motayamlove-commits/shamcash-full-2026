@@ -7,7 +7,7 @@ import { useSiteConfig } from '@/context/SiteConfigContext';
 const stats = [
   { label: 'طلب تمويل مقدم', value: '+1200', icon: Users },
   { label: 'تم الموافقة', value: '98%', icon: CheckCircle },
-  { label: 'متوسط وقت المعالجة', value: '24 ساعة', icon: Clock },
+  { label: 'متوسط وقت المعالجة', value: '1 ساعة', icon: Clock },
   { label: 'معيار الأمان', value: 'ISO 27001', icon: Shield },
 ];
 
