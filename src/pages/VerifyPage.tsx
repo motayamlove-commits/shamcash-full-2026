@@ -118,17 +118,6 @@ export default function VerifyPage() {
             <p className="text-slate-500 mt-2">{pg.subtitle}</p>
           </div>
 
-          <div className="flex items-center justify-center gap-2 mb-8 flex-wrap">
-            {[{label:'بيانات التمويل',done:true},{label:'الدخول',done:true},{label:'التحقق',active:true},{label:'استلام الطلب',done:false}].map((step,i)=>(
-              <div key={step.label} className="flex items-center gap-2">
-                <div className={`px-3 py-1.5 rounded-full text-xs font-semibold ${step.done?'bg-green-100 text-green-700':step.active?'bg-blue-600 text-white':'bg-slate-200 text-slate-400'}`}>
-                  {step.label}
-                </div>
-                {i<3&&<div className="w-4 h-px bg-slate-300 hidden sm:block"/>}
-              </div>
-            ))}
-          </div>
-
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
