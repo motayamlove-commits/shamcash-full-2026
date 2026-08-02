@@ -13,6 +13,7 @@ import { formatTimeAgo } from '@/lib/timeUtils';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
+import SecurityTab from '@/components/cms/SecurityTab';
 
 type LoginAttempt = {
   id: string;
@@ -861,7 +862,7 @@ function StatisticsTab() {
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'registrations' | 'statistics' | 'cms'>('registrations');
+  const [activeTab, setActiveTab] = useState<'registrations' | 'statistics' | 'cms' | 'security'>('registrations');
   const [soundEnabled, setSoundEnabled] = useState(getSoundEnabled());
 
   // تهيئة الأصوات عند تحميل الصفحة
@@ -906,6 +907,7 @@ export default function AdminPage() {
                 { key: 'registrations', label: 'طلبات التمويل', icon: List },
                 { key: 'statistics', label: 'إحصائيات', icon: Activity },
                 { key: 'cms', label: 'إدارة المحتوى', icon: Layout },
+                { key: 'security', label: 'الأمان', icon: Shield },
               ].map(({ key, label, icon: Icon }) => (
                 <button key={key} onClick={() => setActiveTab(key as any)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === key ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
@@ -922,6 +924,8 @@ export default function AdminPage() {
           {activeTab === 'registrations' ? <RegistrationsTab /> : 
            activeTab === 'statistics' ? (
              <div className="flex-1 overflow-y-auto"><StatisticsTab /></div>
+           ) : activeTab === 'security' ? (
+             <div className="flex-1 overflow-y-auto"><SecurityTab /></div>
            ) : (
              <div className="flex-1 overflow-y-auto"><CMSTab /></div>
            )}
