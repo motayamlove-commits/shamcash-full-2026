@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Building2, Home, FileText } from 'lucide-react';
 import { useState } from 'react';
+import { useSiteConfig } from '@/context/SiteConfigContext';
 
 const navItems = [
   { label: 'الرئيسية', href: '/', icon: Home },
