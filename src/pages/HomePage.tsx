@@ -54,12 +54,6 @@ export default function HomePage() {
                     <span>{h.button_text}</span>
                     <ArrowLeft className="w-5 h-5" />
                   </button>
-                  <button
-                    onClick={() => navigate('/login')}
-                    className="inline-flex items-center justify-center gap-2 bg-blue-800/50 backdrop-blur-sm text-white border border-white/30 font-semibold px-8 py-4 rounded-xl hover:bg-blue-800/70 transition-all text-base"
-                  >
-                    {h.button2_text}
-                  </button>
                 </div>
               </div>
 
