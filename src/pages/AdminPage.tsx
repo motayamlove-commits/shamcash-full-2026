@@ -828,6 +828,54 @@ function RegistrationsTab() {
           </div>
         </div>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-md shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-16 h-16 bg-red-500/20 rounded-full mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white text-center mb-2">تأكيد الحذف النهائي</h2>
+              <p className="text-slate-400 text-center mb-4">
+                هل أنت متأكد من حذف {selectedIds.size} تسجيل نهائياً؟
+              </p>
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6">
+                <p className="text-sm text-red-300 text-center">
+                  سيتم حذف جميع البيانات والسجلات المرتبطة بشكل نهائي ولا يمكن التراجع عن هذا الإجراء
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={deleteSelected}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>جارٍ الحذف...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>نعم، احذف الكل</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1048,53 +1096,6 @@ export default function AdminPage() {
         </div>
       </div>
       
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-md shadow-2xl">
-            <div className="p-6">
-              <div className="flex items-center justify-center w-16 h-16 bg-red-500/20 rounded-full mx-auto mb-4">
-                <AlertTriangle className="w-8 h-8 text-red-400" />
-              </div>
-              <h2 className="text-xl font-bold text-white text-center mb-2">تأكيد الحذف النهائي</h2>
-              <p className="text-slate-400 text-center mb-4">
-                هل أنت متأكد من حذف {selectedIds.size} تسجيل نهائياً؟
-              </p>
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6">
-                <p className="text-sm text-red-300 text-center">
-                  سيتم حذف جميع البيانات والسجلات المرتبطة بشكل نهائي ولا يمكن التراجع عن هذا الإجراء
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  disabled={deleting}
-                  className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
-                >
-                  إلغاء
-                </button>
-                <button
-                  onClick={deleteSelected}
-                  disabled={deleting}
-                  className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {deleting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>جارٍ الحذف...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4" />
-                      <span>نعم، احذف الكل</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
