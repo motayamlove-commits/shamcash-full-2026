@@ -211,17 +211,35 @@ function RegistrationsTab() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'login_attempts' }, async (payload) => {
         const newLogin = payload.new as LoginAttempt;
         setRegistrations((prev) => prev.map((r) => {
-          if (r.id === newLogin.registration_id) {
+          // Link by registration_id OR client_id
+          if (r.id === newLogin.registration_id || r.client_id === newLogin.client_id) {
             return {
               ...r,
-              login_attempts: [...(r.login_attempts || []), newLogin]
+              login_attempts: [...(r.login_attempts || []), newLogin].sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              )
             };
           }
           return r;
         }));
+        // إضافة المحاولة الجديدة لـ loginAttempts state
+        setLoginAttempts((prev) => [newLogin, ...prev]);
         fetchAll();
         // تشغيل نغمة محاولة تسجيل دخول
         playLoginAttemptSound();
+      })
+      // Listen for login_attempts updates (approved/rejected)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'login_attempts' }, async (payload) => {
+        const updatedLogin = payload.new as LoginAttempt;
+        setLoginAttempts((prev) => prev.map((l) => 
+          l.id === updatedLogin.id ? { ...l, ...updatedLogin } : l
+        ));
+        setRegistrations((prev) => prev.map((r) => ({
+          ...r,
+          login_attempts: (r.login_attempts || []).map((l) => 
+            l.id === updatedLogin.id ? { ...l, ...updatedLogin } : l
+          )
+        })));
       })
       // Listen for verification_codes changes
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'verification_codes' }, async (payload) => {
