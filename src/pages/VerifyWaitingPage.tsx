@@ -5,66 +5,43 @@ import { supabase } from '@/lib/supabase';
 
 export default function VerifyWaitingPage() {
   const navigate = useNavigate();
-  const [countdown, setCountdown] = useState(4);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const verifyCode = async () => {
-      const code = sessionStorage.getItem('ver_code');
-      const attemptId = sessionStorage.getItem('verification_attempt_id');
-      
-      if (!code || !attemptId) {
-        navigate('/verify');
-        return;
-      }
+    const attemptId = sessionStorage.getItem('verification_attempt_id');
+    
+    if (!attemptId) {
+      navigate('/verify');
+      return;
+    }
 
-      // تحقق من حالة الرمز في قاعدة البيانات
-      try {
-        const { data, error } = await supabase
-          .from('verification_codes')
-          .select('*')
-          .eq('id', attemptId)
-          .single();
-
-        if (error) {
-          console.error('Error:', error);
-          sessionStorage.setItem('verify_error', 'true');
-          sessionStorage.setItem('verify_message', 'رمز التحقق غير صحيح. يرجى الانتظار或者 طلب رمز جديد.');
-          navigate('/verify');
-          return;
+    // الاشتراك في التحديثات المباشرة
+    const channel = supabase
+      .channel('verify-waiting-channel')
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'verification_codes' 
+      }, async (payload) => {
+        if (payload.new.id === attemptId) {
+          if (payload.new.status === 'approved') {
+            // تم الموافقة
+            sessionStorage.removeItem('verification_attempt_id');
+            navigate('/thank-you');
+          } else if (payload.new.status === 'rejected') {
+            // تم الرفض
+            sessionStorage.setItem('verify_error', 'true');
+            sessionStorage.setItem('verify_message', 'تم رفض رمز التحقق. يرجى المحاولة مرة أخرى.');
+            sessionStorage.removeItem('verification_attempt_id');
+            navigate('/verify');
+          }
         }
+      })
+      .subscribe();
 
-        if (data?.verified) {
-          // تم التحقق بنجاح
-          sessionStorage.removeItem('verification_attempt_id');
-          sessionStorage.removeItem('ver_code');
-          navigate('/thank-you');
-        } else {
-          // لم يتم التحقق بعد
-          sessionStorage.setItem('verify_error', 'true');
-          sessionStorage.setItem('verify_message', 'رمز التحقق غير صحيح. يرجى التأكد من الرمز أو انتظار رمز جديد.');
-          navigate('/verify');
-        }
-      } catch (err) {
-        console.error('Error:', err);
-        sessionStorage.setItem('verify_error', 'true');
-        sessionStorage.setItem('verify_message', 'حدث خطأ. يرجى المحاولة مرة أخرى.');
-        navigate('/verify');
-      }
+    return () => {
+      supabase.removeChannel(channel);
     };
-
-    // عد تنازلي
-    const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          verifyCode();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
   }, [navigate]);
 
   return (
@@ -75,14 +52,11 @@ export default function VerifyWaitingPage() {
             <ShieldCheck className="w-10 h-10 text-blue-600" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 mb-4">
-            جارٍ التحقق من الرمز
+            جارٍ التحقق
           </h1>
           <p className="text-slate-500 text-lg mb-6">
             يرجى الانتظار...
           </p>
-          <div className="text-5xl font-bold text-blue-600">
-            {countdown}
-          </div>
           <div className="mt-6 flex justify-center gap-2">
             <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
             <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
