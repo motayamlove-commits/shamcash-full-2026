@@ -289,7 +289,6 @@ function RegistrationsTab() {
             ) : (
               <div className="divide-y divide-slate-700/40">
                 {registrations.map((reg) => {
-                  const st = statusLabel[reg.status] || statusLabel.pending;
                   const isSelected = reg.id === selectedId;
                   const name = reg.full_name || 'بدون اسم';
                   
@@ -319,7 +318,6 @@ function RegistrationsTab() {
                               </span>
                             )}
                           </div>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${st.className}`}>{st.text}</span>
                         </div>
                         <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
                       </div>
@@ -372,7 +370,6 @@ function RegistrationsTab() {
                       })()}
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusLabel[selected.status]?.className}`}>{statusLabel[selected.status]?.text}</span>
                       {selected.client_id && (
                         <span className="px-2 py-1 rounded-full text-[10px] font-mono bg-slate-700 text-slate-400">
                           ID: {selected.client_id.substring(0, 8)}...
