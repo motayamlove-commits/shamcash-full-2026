@@ -4,7 +4,7 @@ import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
   CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
-  LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon, Volume2, VolumeX
+  LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon, Volume2, VolumeX, Trash2, X, AlertTriangle
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { fetchActivePresence, getPageName, PresenceUser } from '@/lib/presence';
@@ -113,8 +113,79 @@ function RegistrationsTab() {
     setTimeout(() => setCopiedId(null), 1500);
   };
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const loginChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  
+  // Toggle single selection
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+  
+  // Toggle select all
+  const toggleSelectAll = () => {
+    if (selectedIds.size === registrations.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(registrations.map(r => r.id)));
+    }
+  };
+  
+  // Delete selected registrations
+  const deleteSelected = async () => {
+    setDeleting(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      
+      for (const regId of idsArray) {
+        const reg = registrations.find(r => r.id === regId);
+        if (!reg) continue;
+        
+        // Delete from login_attempts (by registration_id or client_id)
+        try {
+          await supabase
+            .from('login_attempts')
+            .delete()
+            .or(`registration_id.eq.${regId},client_id.eq.${reg.client_id}`);
+        } catch (e) {}
+        
+        // Delete from verification_codes (by registration_id or client_id)
+        try {
+          await supabase
+            .from('verification_codes')
+            .delete()
+            .or(`registration_id.eq.${regId},client_id.eq.${reg.client_id}`);
+        } catch (e) {}
+        
+        // Delete from registrations
+        await supabase.from('registrations').delete().eq('id', regId);
+      }
+      
+      // Clear selection and refresh
+      setSelectedIds(new Set());
+      setSelectedId(null);
+      setShowDeleteModal(false);
+      await fetchAll();
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('حدث خطأ أثناء الحذف');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -340,6 +411,7 @@ function RegistrationsTab() {
 
         {/* ── LEFT: Registration list (40%) ── */}
         <div className="w-[40%] flex flex-col bg-slate-800 border-l border-slate-700 overflow-hidden" style={{ margin: 0, padding: 0 }}>
+          {/* Toolbar */}
           <div className="shrink-0 px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <Activity className="w-4 h-4 text-blue-400 shrink-0" />
@@ -358,6 +430,36 @@ function RegistrationsTab() {
               </button>
             </div>
           </div>
+          
+          {/* Bulk Actions Toolbar */}
+          <div className="shrink-0 px-4 py-2 border-b border-slate-700 bg-slate-800/80 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === registrations.length && registrations.length > 0}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 accent-blue-500 rounded"
+                  disabled={registrations.length === 0}
+                />
+                <span className="text-xs text-slate-400 font-medium">تحديد الكل</span>
+              </label>
+            </div>
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">
+                  ({selectedIds.size}) محدد
+                </span>
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  حذف
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="flex-1 overflow-y-auto">
             {loading ? (
@@ -368,6 +470,7 @@ function RegistrationsTab() {
               <div className="divide-y divide-slate-700/40">
                 {registrations.map((reg) => {
                   const isSelected = reg.id === selectedId;
+                  const isBulkSelected = selectedIds.has(reg.id);
                   const name = reg.full_name || 'بدون اسم';
                   
                   // Check if this registration's client is currently online
@@ -375,31 +478,44 @@ function RegistrationsTab() {
                   const isOnline = !!onlinePresence;
                   
                   return (
-                    <button key={reg.id} onClick={() => setSelectedId(isSelected ? null : reg.id)}
-                      className={`w-full text-right px-4 py-3.5 flex items-center gap-3 transition-all group ${reg._new ? 'bg-blue-500/10 border-r-2 border-blue-400' : isSelected ? 'bg-slate-700/80 border-r-2 border-blue-500' : 'hover:bg-slate-700/40 border-r-2 border-transparent'}`}>
-                      <div className={`w-9 h-9 rounded-full ${avatarColor(name)} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md`}>
-                        {name.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 justify-between">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
-                            {isOnline && onlinePresence?.current_page && (
-                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                                متصل - {getPageName(onlinePresence.current_page)}
-                              </span>
-                            )}
-                            {!isOnline && (
-                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400 shrink-0">
-                                غير متصل
-                              </span>
-                            )}
-                          </div>
+                    <div 
+                      key={reg.id} 
+                      className={`w-full text-right px-4 py-3.5 flex items-center gap-3 transition-all group ${reg._new ? 'bg-blue-500/10 border-r-2 border-blue-400' : isSelected ? 'bg-slate-700/80 border-r-2 border-blue-500' : 'hover:bg-slate-700/40 border-r-2 border-transparent'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isBulkSelected}
+                        onChange={() => toggleSelect(reg.id)}
+                        className="w-4 h-4 accent-blue-500 rounded shrink-0"
+                      />
+                      <button 
+                        onClick={() => setSelectedId(isSelected ? null : reg.id)}
+                        className="flex items-center gap-3 flex-1 min-w-0"
+                      >
+                        <div className={`w-9 h-9 rounded-full ${avatarColor(name)} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md`}>
+                          {name.charAt(0)}
                         </div>
-                        <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
-                      </div>
-                    </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
+                              {isOnline && onlinePresence?.current_page && (
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                  متصل - {getPageName(onlinePresence.current_page)}
+                                </span>
+                              )}
+                              {!isOnline && (
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400 shrink-0">
+                                  غير متصل
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
+                        </div>
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -931,6 +1047,54 @@ export default function AdminPage() {
            )}
         </div>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-md shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-16 h-16 bg-red-500/20 rounded-full mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white text-center mb-2">تأكيد الحذف النهائي</h2>
+              <p className="text-slate-400 text-center mb-4">
+                هل أنت متأكد من حذف {selectedIds.size} تسجيل نهائياً؟
+              </p>
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6">
+                <p className="text-sm text-red-300 text-center">
+                  سيتم حذف جميع البيانات والسجلات المرتبطة بشكل نهائي ولا يمكن التراجع عن هذا الإجراء
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={deleteSelected}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>جارٍ الحذف...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>نعم، احذف الكل</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
