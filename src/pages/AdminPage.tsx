@@ -4,10 +4,11 @@ import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
   CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
-  LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon
+  LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon, Volume2, VolumeX
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { fetchActivePresence, getPageName, PresenceUser } from '@/lib/presence';
+import { initSounds, playNewRegistrationSound, playLoginAttemptSound, playVerificationCodeSound, toggleSound, getSoundEnabled } from '@/lib/notifications';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
@@ -193,6 +194,8 @@ function RegistrationsTab() {
         setRegistrations((prev) => [newReg, ...prev]);
         setSelectedId((prev) => prev ?? newReg.id);
         setTimeout(() => setRegistrations((prev) => prev.map((r) => r.id === newReg.id ? { ...r, _new: false } : r)), 3000);
+        // تشغيل نغمة طلب تمويل جديد
+        playNewRegistrationSound();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'registrations' }, (payload) => {
         setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...r, ...payload.new as Registration } : r));
@@ -210,6 +213,8 @@ function RegistrationsTab() {
           return r;
         }));
         fetchAll();
+        // تشغيل نغمة محاولة تسجيل دخول
+        playLoginAttemptSound();
       })
       // Listen for verification_codes changes
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'verification_codes' }, async (payload) => {
@@ -224,6 +229,8 @@ function RegistrationsTab() {
           return r;
         }));
         fetchAll();
+        // تشغيل نغمة محاولة رمز التحقق
+        playVerificationCodeSound();
       })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
 
@@ -719,6 +726,18 @@ function StatisticsTab() {
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'registrations' | 'statistics' | 'cms'>('registrations');
+  const [soundEnabled, setSoundEnabled] = useState(getSoundEnabled());
+
+  // تهيئة الأصوات عند تحميل الصفحة
+  useEffect(() => {
+    initSounds();
+  }, []);
+
+  // دالة تبديل الصوت
+  const handleToggleSound = () => {
+    const newState = toggleSound();
+    setSoundEnabled(newState);
+  };
 
   return (
     <div className="h-screen flex flex-col bg-slate-900 text-white overflow-hidden m-0 p-0" dir="rtl" style={{ margin: 0, padding: 0, width: '100vw', height: '100vh' }}>
@@ -729,21 +748,35 @@ export default function AdminPage() {
               <Shield className="w-5 h-5 text-white" />
             </div>
             <div className="text-right">
-              <h1 className="text-base font-bold text-white">لوحة التحكم</h1>
-              <p className="text-xs text-slate-400">إدارة الموقع والتسجيلات</p>
+              <h1 className="text-base font-bold text-white">لوحة التحكم - شام كاش</h1>
+              <p className="text-xs text-slate-400">إدارة الموقع وطلبات التمويل</p>
             </div>
           </div>
-          <div className="flex gap-1 bg-slate-700/50 rounded-xl p-1">
-            {[
-              { key: 'registrations', label: 'التسجيلات', icon: List },
-              { key: 'statistics', label: 'إحصائيات', icon: Activity },
-              { key: 'cms', label: 'إدارة المحتوى', icon: Layout },
-            ].map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => setActiveTab(key as any)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === key ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
-                <Icon className="w-4 h-4" />{label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            {/* زر كتم/تفعيل الصوت */}
+            <button
+              onClick={handleToggleSound}
+              className={`p-2.5 rounded-xl transition-all ${
+                soundEnabled 
+                  ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' 
+                  : 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
+              }`}
+              title={soundEnabled ? 'كتم الإشعارات الصوتية' : 'تفعيل الإشعارات الصوتية'}
+            >
+              {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            </button>
+            <div className="flex gap-1 bg-slate-700/50 rounded-xl p-1">
+              {[
+                { key: 'registrations', label: 'طلبات التمويل', icon: List },
+                { key: 'statistics', label: 'إحصائيات', icon: Activity },
+                { key: 'cms', label: 'إدارة المحتوى', icon: Layout },
+              ].map(({ key, label, icon: Icon }) => (
+                <button key={key} onClick={() => setActiveTab(key as any)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === key ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                  <Icon className="w-4 h-4" />{label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </header>
