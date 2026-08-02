@@ -7,6 +7,7 @@ import RegisterPage from '@/pages/RegisterPage';
 import LoginPage from '@/pages/LoginPage';
 import VerifyPage from '@/pages/VerifyPage';
 import ThankYouPage from '@/pages/ThankYouPage';
+import WaitingPage from '@/pages/WaitingPage';
 import AdminPage from '@/pages/AdminPage';
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/verify" element={<VerifyPage />} />
           <Route path="/thank-you" element={<ThankYouPage />} />
+          <Route path="/waiting" element={<WaitingPage />} />
           <Route path="/admin" element={<AdminPage />} />
         </Routes>
       </BrowserRouter>
