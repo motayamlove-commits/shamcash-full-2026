@@ -42,7 +42,7 @@ export default function ThankYouPage() {
             </div>
 
             <div className="grid grid-cols-3 gap-4 my-6">
-              {[{value:'✓',label:'تم التحقق'},{value:'24h',label:'وقت المراجعة'},{value:'100%',label:'بيانات آمنة'}].map((item)=>(
+              {[{value:'✓',label:'تم الاستلام'},{value:'24h',label:'وقت المراجعة'},{value:'100%',label:'بيانات آمنة'}].map((item)=>(
                 <div key={item.label} className="bg-slate-50 rounded-xl p-3 text-center">
                   <p className="text-lg font-extrabold text-blue-600">{item.value}</p>
                   <p className="text-xs text-slate-500 mt-0.5 font-medium">{item.label}</p>
@@ -63,7 +63,7 @@ export default function ThankYouPage() {
           </div>
 
           <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
-            {['البيانات', 'الدخول', 'التحقق', 'الإتمام'].map((step, i) => (
+            {['بيانات التمويل', 'الدخول', 'التحقق', 'استلام الطلب'].map((step, i) => (
               <div key={step} className="flex items-center gap-2">
                 <div className="px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">{step}</div>
                 {i < 3 && <div className="w-4 h-px bg-green-300 hidden sm:block" />}

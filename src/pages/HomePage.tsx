@@ -5,17 +5,17 @@ import Footer from '@/components/Footer';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 
 const stats = [
-  { label: 'طلب مقدم', value: '+1200', icon: Users },
-  { label: 'تم التحقق', value: '98%', icon: CheckCircle },
+  { label: 'طلب تمويل مقدم', value: '+1200', icon: Users },
+  { label: 'تم الموافقة', value: '98%', icon: CheckCircle },
   { label: 'متوسط وقت المعالجة', value: '24 ساعة', icon: Clock },
   { label: 'معيار الأمان', value: 'ISO 27001', icon: Shield },
 ];
 
 const steps = [
-  { step: '01', title: 'إدخال البيانات', desc: 'أدخل معلوماتك الشخصية بدقة في نموذج التسجيل' },
-  { step: '02', title: 'إنشاء الحساب', desc: 'سجّل بريدك الإلكتروني وكلمة المرور الخاصة بك' },
-  { step: '03', title: 'التحقق من الهوية', desc: 'أدخل رمز التحقق المكون من 4 إلى 8 أرقام' },
-  { step: '04', title: 'اكتمال التسجيل', desc: 'تهانينا! تم تسجيلك بنجاح وستُخطر قريباً' },
+  { step: '01', title: 'تقديم بيانات التمويل', desc: 'أدخل بياناتك ومعلومات التمويل المطلوب بدقة' },
+  { step: '02', title: 'تسجيل الدخول', desc: 'سجّل بريدك الإلكتروني وكلمة المرور الخاصة بك' },
+  { step: '03', title: 'التحقق من الهاتف', desc: 'أدخل رمز التحقق المرسل إلى هاتفك' },
+  { step: '04', title: 'استلام الطلب', desc: 'تهانينا! تم استلام طلبك بنجاح وستتم مراجعته قريباً' },
 ];
 
 export default function HomePage() {
@@ -102,7 +102,7 @@ export default function HomePage() {
         <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
           <div className="text-center mb-12">
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 mb-3">كيف يعمل النظام؟</h2>
-            <p className="text-slate-500 max-w-xl mx-auto">أربع خطوات بسيطة لإتمام تسجيلك والحصول على الخدمة</p>
+            <p className="text-slate-500 max-w-xl mx-auto">أربع خطوات بسيطة لإرسال طلب التمويل والحصول على الموافقة</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {steps.map((item) => (

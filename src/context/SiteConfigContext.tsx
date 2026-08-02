@@ -67,31 +67,31 @@ export type FormField = {
 // ─── Default values (used as fallback) ───────────────────────────────────────
 
 export const DEFAULT_CONFIG: SiteConfig = {
-  header: { logo_text: 'بوابة التسجيل', logo_subtitle: 'الخدمات الإلكترونية' },
+  header: { logo_text: 'شام كاش', logo_subtitle: 'حلول التمويل' },
   footer: {
-    brand_description: 'منصة إلكترونية متكاملة لتقديم طلبات التسجيل.',
-    contact_email: 'info@portal.gov',
-    contact_phone: '+966 11 000 0000',
-    contact_address: 'الرياض، المملكة العربية السعودية',
+    brand_description: 'منصة شام كاش للتمويل الشخصي.',
+    contact_email: 'info@shamcash.sy',
+    contact_phone: '+963 11 000 0000',
+    contact_address: 'دمشق، سوريا',
   },
   home: {
     hero_title: 'مرحباً بك في',
-    hero_title_highlight: 'بوابة التسجيل',
-    hero_subtitle: 'قدّم طلبك الآن بكل سهولة وأمان.',
+    hero_title_highlight: 'شام كاش',
+    hero_subtitle: 'قدّم طلب تمويلك الآن بكل سهولة وأمان.',
     hero_image: 'https://images.pexels.com/photos/8441786/pexels-photo-8441786.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    button_text: 'تقديم طلب الآن',
-    button2_text: 'تسجيل الدخول',
-    badge_text: 'البوابة الإلكترونية الرسمية',
+    button_text: 'تقديم طلب تمويل',
+    button2_text: 'دخول',
+    badge_text: 'منصة التمويل الموثوقة',
   },
-  register: { title: 'إنشاء حساب جديد', subtitle: 'أدخل بياناتك الشخصية', button_text: 'تسجيل والمتابعة' },
-  login: { title: 'تسجيل الدخول', subtitle: 'أدخل بياناتك للمتابعة', button_text: 'تسجيل الدخول' },
-  verify: { title: 'رمز التحقق', subtitle: 'أدخل رمز التحقق', button_text: 'تحقق وإتمام التسجيل', resend_text: 'إعادة إرسال المركز' },
+  register: { title: 'طلب تمويل جديد', subtitle: 'أدخل بياناتك لإرسال طلب التمويل', button_text: 'إرسال الطلب' },
+  login: { title: 'تسجيل الدخول', subtitle: 'أدخل بياناتك للتحقق من طلبك', button_text: 'تسجيل الدخول' },
+  verify: { title: 'رمز التحقق', subtitle: 'أدخل رمز التحقق المرسل لك', button_text: 'تحقق من الرمز', resend_text: 'إعادة إرسال الرمز' },
   thank_you: {
     title: 'تهانينا!',
-    success_text: 'تم تسجيلك بنجاح',
-    message: 'شكراً لك على إتمام عملية التسجيل.',
+    success_text: 'تم استلام طلب تمويلك بنجاح',
+    message: 'شكراً لك! تم استلام طلبك وستتم مراجعته قريباً.',
     button_text: 'العودة للرئيسية',
-    button2_text: 'تسجيل حساب آخر',
+    button2_text: 'تقديم طلب جديد',
   },
 };
 

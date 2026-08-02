@@ -230,7 +230,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="flex items-center gap-2 mb-8 justify-center flex-wrap">
-            {['البيانات الشخصية', 'تسجيل الدخول', 'التحقق', 'الإتمام'].map((step, i) => (
+            {['بيانات التمويل', 'تسجيل الدخول', 'التحقق', 'استلام الطلب'].map((step, i) => (
               <div key={step} className="flex items-center gap-2">
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${i === 0 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
                   {i === 0 && <CheckCircle2 className="w-3 h-3" />}

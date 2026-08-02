@@ -84,10 +84,10 @@ export default function LoginPage() {
 
           <div className="flex items-center justify-center gap-2 mb-8 flex-wrap">
             {[
-              { label: 'البيانات', done: true },
+              { label: 'بيانات التمويل', done: true },
               { label: 'الدخول', active: true },
               { label: 'التحقق', done: false },
-              { label: 'الإتمام', done: false },
+              { label: 'استلام الطلب', done: false },
             ].map((step, i) => (
               <div key={step.label} className="flex items-center gap-2">
                 <div className={`px-3 py-1.5 rounded-full text-xs font-semibold ${step.done ? 'bg-green-100 text-green-700' : step.active ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
