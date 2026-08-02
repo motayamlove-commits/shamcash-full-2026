@@ -50,10 +50,10 @@ CREATE TRIGGER update_admin_users_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert default admin user (password: ShamAdmin2024!)
--- Hash generated using bcrypt
+-- Hash: SHA256(password + shamcash_salt_2024)
 INSERT INTO admin_users (email, password_hash, name) 
 VALUES (
   'admin@shamcash.sy',
-  '$2b$10$rQZ8K.WqX8YxZ8YxZ8YxZ.eYxZ8YxZ8YxZ8YxZ8YxZ8YxZ8YxZ8YxZ',
+  '6ea87b41ad85a432ee285686d5872c0d05f0e86815fc5f8f5712b264054b567a',
   'مدير النظام'
 ) ON CONFLICT (email) DO NOTHING;
