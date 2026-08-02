@@ -18,14 +18,13 @@ export default function Header() {
     <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md group-hover:bg-blue-700 transition-colors">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
-            <div className="hidden sm:block">
-              <p className="text-base font-bold text-slate-800 leading-tight">{h.logo_text}</p>
-              <p className="text-xs text-slate-500">{h.logo_subtitle}</p>
-            </div>
+          <Link to="/" className="flex items-center gap-1.5 group">
+            <img 
+              src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj819GKvhMG98OrYRzpTZJduACkhhjtfJns_LZfpxrR-uYztAvHdIS2OtKFy9sL95HY7ptxfzTgEavA_uA1JlSZK7MwuJzjzdM7nJN-W4JZ69HeTc3OLS5v95fp-xdCekKmiymi9gNoOaMSuHMWuqMT8U3tC4l_b7SiYWDvmqShLtoz_dPVKa_sH3zxg-k/w552-h640/%D8%B4%D8%B9%D8%A7%D8%B1%20%D8%B4%D8%A7%D9%85%20%D9%83%D8%A7%D8%B4%20%D8%A8%D8%AF%D9%88%D9%86%20%D8%AE%D9%84%D9%81%D9%8A%D8%A9.png" 
+              alt="شام كاش" 
+              className="h-10 w-auto rounded-lg shadow-md"
+            />
+            <span className="text-lg font-bold text-slate-800">شام كاش</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
