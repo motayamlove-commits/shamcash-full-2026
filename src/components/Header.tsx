@@ -1,13 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Building2, Home, FileText, LogIn, Shield } from 'lucide-react';
+import { Menu, X, Building2, Home, FileText } from 'lucide-react';
 import { useState } from 'react';
-import { useSiteConfig } from '@/context/SiteConfigContext';
 
 const navItems = [
   { label: 'الرئيسية', href: '/', icon: Home },
   { label: 'تقديم طلب', href: '/register', icon: FileText },
-  { label: 'تسجيل الدخول', href: '/login', icon: LogIn },
-  { label: 'لوحة التحكم', href: '/admin', icon: Shield },
 ];
 
 export default function Header() {

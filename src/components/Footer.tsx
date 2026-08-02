@@ -26,8 +26,6 @@ export default function Footer() {
               {[
                 { label: 'الصفحة الرئيسية', href: '/' },
                 { label: 'تقديم طلب جديد', href: '/register' },
-                { label: 'تسجيل الدخول', href: '/login' },
-                { label: 'لوحة التحكم', href: '/admin' },
               ].map((link) => (
                 <li key={link.href}>
                   <Link to={link.href} className="hover:text-blue-400 transition-colors">{link.label}</Link>
