@@ -9,6 +9,7 @@ import {
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { fetchActivePresence, getPageName, PresenceUser } from '@/lib/presence';
 import { initSounds, playNewRegistrationSound, playLoginAttemptSound, playVerificationCodeSound, toggleSound, getSoundEnabled } from '@/lib/notifications';
+import { formatTimeAgo } from '@/lib/timeUtils';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
@@ -438,7 +439,7 @@ function RegistrationsTab() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-700 text-slate-400'}`}>
-                                    {new Date(item.created_at).toLocaleString('ar-SA')}
+                                    {formatTimeAgo(item.created_at)}
                                   </span>
                                 </div>
                               </div>
@@ -506,7 +507,7 @@ function RegistrationsTab() {
                                   <h4 className={`text-sm font-bold ${isNewest ? 'text-amber-400' : 'text-white'}`}>تسجيل الدخول</h4>
                                 </div>
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>
-                                  {new Date(item.created_at).toLocaleString('ar-SA')}
+                                  {formatTimeAgo(item.created_at)}
                                 </span>
                               </div>
                               <div className="grid grid-cols-2 gap-3">
@@ -545,7 +546,7 @@ function RegistrationsTab() {
                                   <h4 className={`text-sm font-bold ${isNewest ? 'text-green-400' : 'text-white'}`}>رمز التحقق</h4>
                                 </div>
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                                  {new Date(item.created_at).toLocaleString('ar-SA')}
+                                  {formatTimeAgo(item.created_at)}
                                 </span>
                               </div>
                               <div className="bg-slate-900/50 rounded-lg p-3 text-center">
