@@ -1,0 +1,18 @@
+{
+  "name": "shamcash-socket-server",
+  "version": "1.0.0",
+  "description": "Socket.io server for Sham Cash presence tracking",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

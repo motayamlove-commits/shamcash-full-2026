@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
+import { initSocket, disconnectSocket, updatePage } from '@/lib/socket';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -102,10 +103,15 @@ export default function RegisterPage() {
 
   // Presence - Track when user is on this page
   useEffect(() => {
+    // Start Supabase presence tracking (existing system)
     startPresenceTracking('تسجيل');
+    
+    // Start Socket.io connection (new system)
+    initSocket('/register');
     
     return () => {
       stopPresenceTracking();
+      disconnectSocket();
     };
   }, []);
 
@@ -194,6 +200,10 @@ export default function RegisterPage() {
     
     sessionStorage.setItem('reg_id', data.id);
     sessionStorage.setItem('reg_email', coreData['email'] || '');
+    
+    // Update Socket.io page before navigation
+    updatePage('/login');
+    
     // Redirect to login page after successful registration
     navigate('/login');
   };

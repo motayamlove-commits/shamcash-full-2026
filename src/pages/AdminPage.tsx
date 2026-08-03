@@ -14,6 +14,8 @@ import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
 import SecurityTab from '@/components/cms/SecurityTab';
+// Socket.io for real-time presence
+import { initSocket, disconnectSocket, onUsersUpdate, SocketUser, getPageDisplayName, isSocketConnected } from '@/lib/socket';
 
 type LoginAttempt = {
   id: string;
@@ -101,8 +103,12 @@ function RegistrationsTab() {
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Online presence tracking
+  // Online presence tracking (Supabase - existing)
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
+
+  // Socket.io users (new system)
+  const [socketUsers, setSocketUsers] = useState<SocketUser[]>([]);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   // Login attempts
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
@@ -258,9 +264,21 @@ function RegistrationsTab() {
       fetchActivePresence().then(users => setOnlineUsers(users));
     }, 3000);
 
+    // Socket.io connection for real-time presence
+    initSocket('/admin');
+    setSocketConnected(isSocketConnected());
+    
+    // Subscribe to Socket.io users update
+    const unsubscribe = onUsersUpdate((users) => {
+      setSocketUsers(users);
+      setSocketConnected(isSocketConnected());
+    });
+
     return () => {
       supabase.removeChannel(presenceChannel);
       clearInterval(pollingInterval);
+      disconnectSocket();
+      unsubscribe();
     };
   }, []);
 
@@ -474,8 +492,9 @@ function RegistrationsTab() {
                   const name = reg.full_name || 'بدون اسم';
                   
                   // Check if this registration's client is currently online
-                  const onlinePresence = reg.client_id ? onlineUsers.find(u => u.client_id === reg.client_id) : null;
-                  const isOnline = !!onlinePresence;
+                  const socketPresence = reg.client_id ? socketUsers.find(u => u.clientId === reg.client_id) : null;
+                  const isOnline = !!socketPresence;
+                  const currentPage = socketPresence?.page || '';
                   
                   return (
                     <div 
@@ -499,10 +518,10 @@ function RegistrationsTab() {
                           <div className="flex items-center gap-2 justify-between">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
-                              {isOnline && onlinePresence?.current_page && (
+                              {isOnline && currentPage && (
                                 <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 shrink-0">
                                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                                  متصل - {getPageName(onlinePresence.current_page)}
+                                  متصل - {getPageDisplayName(currentPage)}
                                 </span>
                               )}
                               {!isOnline && (
@@ -547,12 +566,12 @@ function RegistrationsTab() {
                     <div className="flex items-center gap-2">
                       <h3 className="text-lg font-extrabold text-white leading-tight">{selected.full_name || 'بدون اسم'}</h3>
                       {(() => {
-                        const selectedPresence = selected.client_id ? onlineUsers.find(u => u.client_id === selected.client_id) : null;
-                        if (selectedPresence) {
+                        const selectedSocketPresence = selected.client_id ? socketUsers.find(u => u.clientId === selected.client_id) : null;
+                        if (selectedSocketPresence) {
                           return (
                             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400">
                               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                              متصل - {getPageName(selectedPresence.current_page || '')}
+                              متصل - {getPageDisplayName(selectedSocketPresence.page || '')}
                             </span>
                           );
                         }

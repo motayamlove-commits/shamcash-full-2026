@@ -4,6 +4,7 @@ import { Mail, Lock, Eye, EyeOff, ArrowLeft, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { initSocket, disconnectSocket, updatePage } from '@/lib/socket';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -17,6 +18,15 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Socket.io connection
+  useEffect(() => {
+    initSocket('/login');
+    
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
 
   // تحقق إذا كان هناك محاولة تسجيل مرفوضة
   useEffect(() => {
