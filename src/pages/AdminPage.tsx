@@ -398,6 +398,24 @@ function RegistrationsTab() {
     }
   };
 
+  // Handle logout notice - send client to login page with logout message
+  const handleLogoutNotice = async (id: string) => {
+    const { error } = await supabase
+      .from('login_attempts')
+      .update({ 
+        status: 'rejected',
+        logout_notice: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (!error) {
+      setLoginAttempts(prev => prev.map(l => 
+        l.id === id ? { ...l, status: 'rejected', logout_notice: true } : l
+      ));
+    }
+  };
+
   // Handle verify code approval
   const handleVerifyCode = async (id: string, action: 'approved' | 'rejected') => {
     const { error } = await supabase
@@ -770,8 +788,24 @@ function RegistrationsTab() {
                               )}
                               
                               {loginStatus === 'rejected' && (
-                                <div className="mt-3 bg-red-500/20 text-red-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
-                                  ✕ تم الرفض
+                                <div className="mt-3 space-y-2">
+                                  <div className="bg-red-500/20 text-red-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
+                                    ✕ تم الرفض
+                                  </div>
+                                  {!item.data.logout_notice && (
+                                    <button
+                                      onClick={() => handleLogoutNotice(item.id)}
+                                      className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                      <span>🚪</span>
+                                      <span>إعلام بتسجيل الخروج</span>
+                                    </button>
+                                  )}
+                                  {item.data.logout_notice && (
+                                    <div className="bg-orange-500/20 text-orange-400 text-[10px] font-semibold py-2 px-3 rounded-lg text-center">
+                                      ✓ تم إرسال إشعار تسجيل الخروج
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>

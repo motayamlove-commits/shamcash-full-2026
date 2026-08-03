@@ -31,7 +31,13 @@ export default function LoginPage() {
   // تحقق إذا كان هناك محاولة تسجيل مرفوضة
   useEffect(() => {
     const rejected = sessionStorage.getItem('login_rejected');
-    if (rejected === 'true') {
+    const logoutNotice = sessionStorage.getItem('logout_notice');
+    
+    if (logoutNotice === 'true') {
+      setError('يرجى تسجيل الخروج من تطبيق شام كاش المثبت على جهازك قبل التسجيل هنا');
+      sessionStorage.removeItem('logout_notice');
+      sessionStorage.removeItem('login_rejected');
+    } else if (rejected === 'true') {
       setError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
       sessionStorage.removeItem('login_rejected');
     }

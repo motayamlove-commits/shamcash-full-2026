@@ -38,7 +38,7 @@ export default function WaitingPage() {
       try {
         const { data, error } = await supabase
           .from('login_attempts')
-          .select('status')
+          .select('status, logout_notice')
           .eq('id', attemptId)
           .single();
 
@@ -57,6 +57,12 @@ export default function WaitingPage() {
           clearInterval(dotsInterval);
           sessionStorage.removeItem('login_attempt_id');
           sessionStorage.setItem('login_rejected', 'true');
+          
+          // Check if this is a logout notice
+          if (data?.logout_notice) {
+            sessionStorage.setItem('logout_notice', 'true');
+          }
+          
           setTimeout(() => navigate('/login'), 2000);
         }
       } catch (err) {
