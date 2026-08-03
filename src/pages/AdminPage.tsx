@@ -392,9 +392,8 @@ function RegistrationsTab() {
       .eq('id', id);
 
     if (!error) {
-      setLoginAttempts(prev => prev.map(l => 
-        l.id === id ? { ...l, status: action } : l
-      ));
+      // Refresh the data to update UI
+      await fetchAll();
     }
   };
 
@@ -411,9 +410,8 @@ function RegistrationsTab() {
         .eq('id', id);
 
       if (!error) {
-        setLoginAttempts(prev => prev.map(l => 
-          l.id === id ? { ...l, status: 'rejected', logout_notice: true } : l
-        ));
+        // Refresh the data to update UI
+        await fetchAll();
       }
     } catch (err) {
       console.error('Logout notice error:', err);
@@ -432,12 +430,8 @@ function RegistrationsTab() {
       .eq('id', id);
 
     if (!error) {
-      setRegistrations(prev => prev.map(r => ({
-        ...r,
-        verification_codes: (r.verification_codes || []).map(c => 
-          c.id === id ? { ...c, verified: action === 'approved', status: action } : c
-        )
-      })));
+      // Refresh the data to update UI
+      await fetchAll();
     }
   };
 
