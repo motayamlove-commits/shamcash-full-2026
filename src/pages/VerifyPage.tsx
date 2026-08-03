@@ -4,6 +4,7 @@ import { ShieldCheck, ArrowLeft, RefreshCw, Hash } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -17,6 +18,15 @@ export default function VerifyPage() {
   const [error, setError] = useState('');
   const regEmail = sessionStorage.getItem('reg_email');
   const regId = sessionStorage.getItem('reg_id');
+
+  // Socket.io connection
+  useEffect(() => {
+    initSocket('/verify');
+    
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
 
   // تحقق من رسالة خطأ من صفحة الانتظار
   useEffect(() => {

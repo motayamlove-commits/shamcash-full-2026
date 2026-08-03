@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -9,6 +10,15 @@ export default function WaitingPage() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<'waiting' | 'approved' | 'rejected'>('waiting');
   const [dots, setDots] = useState('');
+
+  // Socket.io connection
+  useEffect(() => {
+    initSocket('/waiting');
+    
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
 
   useEffect(() => {
     const attemptId = sessionStorage.getItem('login_attempt_id');

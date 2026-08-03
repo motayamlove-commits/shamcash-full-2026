@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, Home, Star } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -9,6 +10,15 @@ export default function ThankYouPage() {
   const navigate = useNavigate();
   const { config } = useSiteConfig();
   const pg = config.thank_you;
+
+  // Socket.io connection
+  useEffect(() => {
+    initSocket('/thank-you');
+    
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
 
   useEffect(() => {
     sessionStorage.removeItem('reg_id');

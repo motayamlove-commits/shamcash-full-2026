@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Clock, Shield, Users } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 
 const stats = [
   { label: 'طلب تمويل مقدم', value: '+1200', icon: Users },
@@ -22,6 +24,15 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { config } = useSiteConfig();
   const h = config.home;
+
+  // Socket.io connection
+  useEffect(() => {
+    initSocket('/');
+    
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">

@@ -2,10 +2,20 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 
 export default function VerifyWaitingPage() {
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
+
+  // Socket.io connection
+  useEffect(() => {
+    initSocket('/verify-waiting');
+    
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
 
   useEffect(() => {
     const attemptId = sessionStorage.getItem('verification_attempt_id');
