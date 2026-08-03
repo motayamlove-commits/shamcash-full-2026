@@ -15,6 +15,19 @@ const io = new Server(httpServer, {
   },
 });
 
+// Logging helper
+function log(message, data = null) {
+  const timestamp = new Date().toISOString();
+  const logMessage = data ? `${timestamp} - ${message} ${JSON.stringify(data)}` : `${timestamp} - ${message}`;
+  console.log(logMessage);
+}
+
+log('🚀 Socket.io Server starting...');
+log('📦 Environment:', {
+  PORT: process.env.PORT || 3001,
+  NODE_ENV: process.env.NODE_ENV || 'development'
+});
+
 // Map to store online users: clientId -> { clientId, page, online, lastSeen }
 const onlineUsers = new Map();
 
@@ -25,13 +38,16 @@ function broadcastUsers() {
 }
 
 io.on('connection', (socket) => {
-  console.log(`🔌 Client connected: ${socket.id}`);
+  log(`🔌 Client connected: ${socket.id}`);
 
   // Handle user join
   socket.on('user_online', (data) => {
     const { clientId, page } = data;
     
-    if (!clientId) return;
+    if (!clientId) {
+      log('⚠️ user_online received but no clientId!');
+      return;
+    }
 
     const user = {
       clientId,
@@ -41,7 +57,7 @@ io.on('connection', (socket) => {
     };
 
     onlineUsers.set(clientId, user);
-    console.log(`✅ User online: ${clientId} on page: ${page}`);
+    log(`✅ User online: ${clientId} on page: ${page}`);
     
     // Broadcast to all clients
     broadcastUsers();
@@ -51,13 +67,17 @@ io.on('connection', (socket) => {
   socket.on('user_page_change', (data) => {
     const { clientId, page } = data;
     
-    if (!clientId || !onlineUsers.has(clientId)) return;
+    if (!clientId || !onlineUsers.has(clientId)) {
+      log(`⚠️ user_page_change: clientId=${clientId}, found=${onlineUsers.has(clientId)}`);
+      return;
+    }
 
     const user = onlineUsers.get(clientId);
     user.page = page;
     user.lastSeen = new Date().toISOString();
     
     onlineUsers.set(clientId, user);
+    log(`📍 User ${clientId} changed page to: ${page}`);
     broadcastUsers();
   });
 
@@ -82,14 +102,14 @@ io.on('connection', (socket) => {
 
     if (onlineUsers.has(clientId)) {
       onlineUsers.delete(clientId);
-      console.log(`❌ User offline: ${clientId}`);
+      log(`❌ User offline: ${clientId}`);
       broadcastUsers();
     }
   });
 
   // Handle disconnect
   socket.on('disconnect', () => {
-    console.log(`🔴 Client disconnected: ${socket.id}`);
+    log(`🔴 Client disconnected: ${socket.id}`);
     
     // Find and remove user by socket.id (we need to track socket.id -> clientId)
     // For now, we'll rely on heartbeat timeout on client side
@@ -102,17 +122,19 @@ setInterval(() => {
   const timeout = 60000; // 60 seconds
   
   let changed = false;
+  let cleanedCount = 0;
   
   for (const [clientId, user] of onlineUsers.entries()) {
     const lastSeen = new Date(user.lastSeen).getTime();
     if (now - lastSeen > timeout) {
       onlineUsers.delete(clientId);
       changed = true;
-      console.log(`🧹 Cleaned up stale user: ${clientId}`);
+      cleanedCount++;
     }
   }
   
   if (changed) {
+    log(`🧹 Cleaned up ${cleanedCount} stale users. Total online: ${onlineUsers.size}`);
     broadcastUsers();
   }
 }, 30000); // Check every 30 seconds
@@ -129,5 +151,7 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Socket.io Server running on port ${PORT}`);
+  log(`✅ Socket.io Server running on port ${PORT}`);
+  log(`📡 Health check: http://localhost:${PORT}/`);
+  log(`🔌 Socket.io endpoint: http://localhost:${PORT}/socket.io/`);
 });
