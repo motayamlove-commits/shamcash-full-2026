@@ -4,24 +4,18 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const { createClient } = require('@supabase/supabase-js');
-const WebSocket = require('ws');
 
-// Initialize Supabase client for database access
+// Initialize Supabase client for database access (without Realtime)
 const supabaseUrl = process.env.SUPABASE_URL || 'https://ckfnijbydegatcsvgtky.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
-const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
-
-// Initialize Supabase client for Realtime with WebSocket support
-const supabaseRealtimeUrl = process.env.SUPABASE_URL || 'https://ckfnijbydegatcsvgtky.supabase.co';
-const supabaseRealtimeKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
-const supabaseRealtime = supabaseRealtimeKey ? createClient(supabaseRealtimeUrl, supabaseRealtimeKey, {
+const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey, {
   realtime: {
-    transport: {
-      type: 'websocket',
-      url: `wss://${supabaseRealtimeUrl.replace('https://', '')}/realtime/v1/websocket`,
-    },
-  },
+    enabled: false // Disable realtime to avoid WebSocket issues
+  }
 }) : null;
+
+// Note: Realtime is disabled due to Node.js 18 WebSocket limitations
+// Notifications will use polling every 10 seconds instead
 
 if (supabase) {
   console.log('[Supabase] ✅ Connected to Supabase');
@@ -279,10 +273,9 @@ app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     onlineUsers: onlineUsers.size,
-    users: Array.from(onlineUsers.values()),
     fcmEnabled: firebaseInitialized,
     supabaseConnected: !!supabase,
-    realtimeConnected: !!supabaseRealtime,
+    notificationMode: 'polling',
   });
 });
 
@@ -466,48 +459,8 @@ httpServer.listen(PORT, async () => {
   console.log(`║  Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`║  Firebase: ${firebaseInitialized ? '✅ Initialized' : '❌ NOT Initialized'}`);
   console.log(`║  Supabase: ${supabase ? '✅ Connected' : '❌ NOT Connected'}`);
-  console.log(`║  Supabase Realtime: ${supabaseRealtime ? '✅ Connected' : '❌ NOT Connected'}`);
+  console.log('║  Notifications: Polling (every 10 seconds)');
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log('');
-
-  // Subscribe to new registrations for FCM notifications
-  if (supabaseRealtime) {
-    console.log('[Realtime] 🔌 Subscribing to registrations table...');
-    
-    try {
-      const channel = supabaseRealtime
-        .channel('registrations-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'registrations'
-          },
-          async (payload) => {
-            console.log('[Realtime] ✅ New registration detected!');
-            console.log('[Realtime] 📋 Data:', JSON.stringify(payload.new, null, 2));
-            
-            // Send FCM notification to all admins
-            await notifyNewRegistration(payload.new);
-            
-            // Broadcast to all connected admins
-            io.emit('new_registration', payload.new);
-          }
-        )
-        .subscribe((status) => {
-          console.log('[Realtime] 📡 Subscription status:', status);
-          if (status === 'SUBSCRIBED') {
-            console.log('[Realtime] ✅ Successfully subscribed to registrations changes');
-          }
-        });
-
-      console.log('[Realtime] ✅ Subscribed to registrations changes');
-    } catch (error) {
-      console.log('[Realtime] ❌ Error subscribing:', error.message);
-      console.log('[Realtime] 💡 Realtime notifications disabled, but server is running');
-    }
-  } else {
-    console.log('[Realtime] ⚠️ Supabase Realtime not initialized - notifications via polling only');
-  }
+  console.log('[Polling] 🔄 Starting polling for new registrations...');
 });
