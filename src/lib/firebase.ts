@@ -5,7 +5,7 @@
 
 // Import Firebase modules
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage, Messaging, IsSupportedBrowser } from 'firebase/messaging';
+import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
 
 // Firebase Configuration
 const firebaseConfig = {
@@ -59,10 +59,10 @@ export async function initializeFirebase(): Promise<Messaging | null> {
  */
 export function isSupported(): boolean {
   return (
+    typeof window !== 'undefined' &&
     'Notification' in window &&
     'serviceWorker' in navigator &&
-    'PushManager' in window &&
-    IsSupportedBrowser()
+    'PushManager' in window
   );
 }
 
