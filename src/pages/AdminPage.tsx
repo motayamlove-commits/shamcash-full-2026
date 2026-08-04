@@ -383,6 +383,7 @@ function RegistrationsTab() {
 
   // Handle approve/reject login attempts
   const handleLoginAttempt = async (id: string, action: 'approved' | 'rejected') => {
+    console.log('handleLoginAttempt - id:', id, 'action:', action);
     const { error } = await supabase
       .from('login_attempts')
       .update({ 
@@ -391,7 +392,10 @@ function RegistrationsTab() {
       })
       .eq('id', id);
 
+    console.log('handleLoginAttempt - error:', error);
+
     if (!error) {
+      console.log('handleLoginAttempt - update successful');
       // Clear selected to force refresh
       const currentSelected = selectedId;
       setSelectedId(null);
@@ -405,6 +409,7 @@ function RegistrationsTab() {
 
   // Handle logout notice - send client to login page with logout message
   const handleLogoutNotice = async (id: string) => {
+    console.log('handleLogoutNotice - id:', id);
     try {
       const { error } = await supabase
         .from('login_attempts')
@@ -415,7 +420,10 @@ function RegistrationsTab() {
         })
         .eq('id', id);
 
+      console.log('handleLogoutNotice - error:', error);
+      
       if (!error) {
+        console.log('handleLogoutNotice - update successful');
         // Clear selected to force refresh
         const currentSelected = selectedId;
         setSelectedId(null);

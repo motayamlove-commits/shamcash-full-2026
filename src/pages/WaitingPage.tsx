@@ -50,6 +50,7 @@ export default function WaitingPage() {
         console.log('checkStatus - data:', data);
         console.log('checkStatus - status:', data?.status);
         console.log('checkStatus - logout_notice:', data?.logout_notice);
+        console.log('checkStatus - logout_notice type:', typeof data?.logout_notice);
 
         if (data?.status === 'approved') {
           setStatus('approved');
@@ -63,8 +64,9 @@ export default function WaitingPage() {
           sessionStorage.setItem('login_rejected', 'true');
           console.log('Set login_rejected to sessionStorage');
           
-          // Check if this is a logout notice
-          if (data?.logout_notice) {
+          // Check if this is a logout notice - explicit check for true
+          console.log('Checking logout_notice:', data?.logout_notice, '=== true?', data?.logout_notice === true);
+          if (data?.logout_notice === true) {
             sessionStorage.setItem('logout_notice', 'true');
             console.log('Set logout_notice to sessionStorage');
           }
