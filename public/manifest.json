@@ -2,14 +2,16 @@
   "name": "شام كاش - لوحة التحكم",
   "short_name": "شام كاش",
   "description": "نظام إدارة تسجيل العملاء",
-  "start_url": "/",
+  "start_url": "/admin?utm_source=homescreen",
   "display": "standalone",
+  "display_override": ["standalone"],
   "background_color": "#101935",
   "theme_color": "#101935",
-  "orientation": "portrait",
+  "orientation": "any",
   "dir": "rtl",
   "lang": "ar",
   "scope": "/",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
@@ -61,6 +63,7 @@
     }
   ],
   "categories": ["business", "productivity"],
+  "screenshots": [],
   "shortcuts": [
     {
       "name": "لوحة التحكم",

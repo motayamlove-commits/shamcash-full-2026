@@ -63,6 +63,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Handle navigation requests (for PWA routing)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Clone and cache the response
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          return response;
+        })
+        .catch(() => {
+          // Return cached index.html for SPA routing
+          return caches.match('/index.html');
+        })
+    );
+    return;
+  }
+
+  // For other requests, use network first with cache fallback
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -86,7 +108,7 @@ self.addEventListener('fetch', (event) => {
             
             // If it's a navigation request, return the offline page
             if (event.request.mode === 'navigate') {
-              return caches.match(OFFLINE_URL);
+              return caches.match('/index.html');
             }
             
             return new Response('Offline', { status: 503 });
