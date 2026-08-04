@@ -33,19 +33,28 @@ export default function LoginPage() {
     const rejected = sessionStorage.getItem('login_rejected');
     const logoutNotice = sessionStorage.getItem('logout_notice');
     
-    console.log('LoginPage - login_rejected:', rejected);
-    console.log('LoginPage - logout_notice:', logoutNotice);
-    console.log('LoginPage - error:', error);
+    console.log('LoginPage useEffect - login_rejected:', rejected, typeof rejected);
+    console.log('LoginPage useEffect - logout_notice:', logoutNotice);
+    console.log('LoginPage useEffect - current error state:', error);
     
     if (logoutNotice === 'true') {
+      console.log('Setting logout notice error message');
       setError('يرجى تسجيل الخروج من تطبيق شام كاش المثبت على جهازك قبل التسجيل هنا');
       sessionStorage.removeItem('logout_notice');
       sessionStorage.removeItem('login_rejected');
     } else if (rejected === 'true') {
+      console.log('Setting rejected error message');
       setError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
       sessionStorage.removeItem('login_rejected');
+    } else {
+      console.log('No rejection found');
     }
   }, []);
+
+  // Log error state changes
+  useEffect(() => {
+    console.log('Error state changed to:', error);
+  }, [error]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
