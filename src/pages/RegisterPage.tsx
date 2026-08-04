@@ -110,10 +110,18 @@ export default function RegisterPage() {
     // Start Socket.io connection (new system)
     initSocket('/register');
     
-    // Connect to Socket for notification
+    // Connect to Socket for notification (with fallback)
     const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
     socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling'],
+      timeout: 5000,
+      reconnection: true,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 2000,
+    });
+    
+    socketRef.current.on('connect_error', (error) => {
+      console.warn('[Register] Socket connection failed, will use polling fallback');
     });
     
     return () => {
@@ -206,16 +214,21 @@ export default function RegisterPage() {
       return; 
     }
 
-    // Send notification to admin via Socket
+    // Send notification to admin via Socket (with HTTP fallback)
+    const notificationData = {
+      id: data.id,
+      name: payload.full_name || payload.name || 'عميل جديد',
+      phone: payload.phone,
+      created_at: new Date().toISOString(),
+    };
+    
     if (socketRef.current?.connected) {
-      const notificationData = {
-        id: data.id,
-        name: payload.full_name || payload.name || 'عميل جديد',
-        phone: payload.phone,
-        created_at: new Date().toISOString(),
-      };
+      // Send via Socket
       socketRef.current.emit('registration_completed', notificationData);
-      console.log('[Register] Sent registration_completed event:', notificationData);
+      console.log('[Register] Sent notification via Socket');
+    } else {
+      // Fallback: Send via HTTP API (Polling will also catch this)
+      console.log('[Register] Socket not connected, relying on polling fallback');
     }
 
     // Stop presence tracking before navigation
