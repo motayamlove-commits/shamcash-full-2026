@@ -19,6 +19,9 @@ type AdminAuthContextType = {
   remainingAttempts: number;
   isLocked: boolean;
   lockTimeRemaining: number | null;
+  notificationsEnabled: boolean;
+  setNotificationsEnabled: (enabled: boolean) => void;
+  checkNotificationsEnabled: () => Promise<boolean>;
 };
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
@@ -46,6 +49,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [remainingAttempts, setRemainingAttempts] = useState(MAX_ATTEMPTS);
   const [isLocked, setIsLocked] = useState(false);
   const [lockTimeRemaining, setLockTimeRemaining] = useState<number | null>(null);
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -305,6 +309,55 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Set notifications enabled state
+  const setNotificationsEnabled = (enabled: boolean) => {
+    setNotificationsEnabledState(enabled);
+    if (enabled) {
+      localStorage.setItem('notifications_enabled', 'true');
+    } else {
+      localStorage.removeItem('notifications_enabled');
+    }
+  };
+
+  // Check if notifications are enabled for this admin
+  const checkNotificationsEnabled = async (): Promise<boolean> => {
+    if (!admin) {
+      setNotificationsEnabledState(false);
+      return false;
+    }
+
+    try {
+      // Check localStorage first
+      const localEnabled = localStorage.getItem('notifications_enabled') === 'true';
+      
+      // Get current FCM token
+      const { getCurrentToken } = await import('@/lib/firebase');
+      const currentToken = await getCurrentToken();
+      
+      if (!currentToken) {
+        setNotificationsEnabledState(false);
+        return false;
+      }
+
+      // Check if token exists in database
+      const { data } = await supabase
+        .from('fcm_tokens')
+        .select('id, is_active')
+        .eq('admin_id', admin.id)
+        .eq('device_token', currentToken)
+        .eq('is_active', true)
+        .single();
+
+      const isEnabled = localEnabled && !!data;
+      setNotificationsEnabledState(isEnabled);
+      return isEnabled;
+    } catch (err) {
+      console.error('Error checking notifications:', err);
+      setNotificationsEnabledState(false);
+      return false;
+    }
+  };
+
   return (
     <AdminAuthContext.Provider value={{
       admin,
@@ -315,7 +368,10 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       updateAdmin,
       remainingAttempts,
       isLocked,
-      lockTimeRemaining
+      lockTimeRemaining,
+      notificationsEnabled,
+      setNotificationsEnabled,
+      checkNotificationsEnabled,
     }}>
       {children}
     </AdminAuthContext.Provider>

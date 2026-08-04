@@ -7,6 +7,7 @@ import {
   LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon, Volume2, VolumeX, Trash2, X, AlertTriangle
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
+import { useAdminAuth } from '@/context/AdminAuthContext';
 import { fetchActivePresence, getPageName, PresenceUser } from '@/lib/presence';
 import { initSounds, playNewRegistrationSound, playLoginAttemptSound, playVerificationCodeSound, toggleSound, getSoundEnabled } from '@/lib/notifications';
 import { formatTimeAgo } from '@/lib/timeUtils';
@@ -14,6 +15,7 @@ import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
 import SecurityTab from '@/components/cms/SecurityTab';
+import NotificationPermission from '@/components/notifications/NotificationPermission';
 // Socket.io for real-time presence
 import { initSocket, disconnectSocket, onUsersUpdate, SocketUser, getPageDisplayName, isSocketConnected } from '@/lib/socket';
 
@@ -1095,11 +1097,50 @@ function StatisticsTab() {
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'registrations' | 'statistics' | 'cms' | 'security'>('registrations');
   const [soundEnabled, setSoundEnabled] = useState(getSoundEnabled());
+  
+  // Notifications state
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [notificationLoaded, setNotificationLoaded] = useState(false);
+  const { admin, checkNotificationsEnabled, setNotificationsEnabled } = useAdminAuth();
 
   // تهيئة الأصوات عند تحميل الصفحة
   useEffect(() => {
     initSounds();
   }, []);
+
+  // التحقق من تفعيل الإشعارات بعد 5 ثواني
+  useEffect(() => {
+    const checkNotifications = async () => {
+      if (!admin) return;
+      
+      // انتظر 5 ثواني للتأكد من تحميل الصفحة بالكامل
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // تحقق إذا الإشعارات مفعلة مسبقاً
+      const isEnabled = await checkNotificationsEnabled();
+      
+      if (!isEnabled) {
+        setShowNotificationModal(true);
+      }
+      
+      setNotificationLoaded(true);
+    };
+    
+    if (admin) {
+      checkNotifications();
+    }
+  }, [admin, checkNotificationsEnabled]);
+
+  // Handle notification complete
+  const handleNotificationComplete = (success: boolean) => {
+    setShowNotificationModal(false);
+    setNotificationsEnabled(success);
+  };
+
+  // Handle notification skip
+  const handleNotificationSkip = () => {
+    setShowNotificationModal(false);
+  };
 
   // دالة تبديل الصوت
   const handleToggleSound = () => {
@@ -1162,6 +1203,15 @@ export default function AdminPage() {
            )}
         </div>
       </div>
+      
+      {/* Notification Permission Modal */}
+      {showNotificationModal && admin && (
+        <NotificationPermission
+          adminId={admin.id}
+          onComplete={handleNotificationComplete}
+          onSkip={handleNotificationSkip}
+        />
+      )}
       
     </div>
   );
