@@ -158,8 +158,24 @@ export async function getCurrentToken(): Promise<string | null> {
     }
     console.log('[Firebase] getCurrentToken - Firebase initialized');
 
-    console.log('[Firebase] getCurrentToken - getting service worker...');
-    const registration = await navigator.serviceWorker.ready;
+    console.log('[Firebase] getCurrentToken - registering service worker...');
+    let registration: ServiceWorkerRegistration;
+    
+    // Check if service worker is already registered
+    const existingRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+    
+    if (existingRegistration) {
+      console.log('[Firebase] getCurrentToken - using existing service worker registration');
+      registration = existingRegistration;
+    } else {
+      console.log('[Firebase] getCurrentToken - registering new service worker...');
+      registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      console.log('[Firebase] getCurrentToken - service worker registered');
+    }
+
+    // Wait for service worker to be ready
+    console.log('[Firebase] getCurrentToken - waiting for service worker to be ready...');
+    await navigator.serviceWorker.ready;
     console.log('[Firebase] getCurrentToken - service worker ready');
 
     console.log('[Firebase] getCurrentToken - getting token with VAPID_KEY:', VAPID_KEY ? 'present' : 'MISSING');
