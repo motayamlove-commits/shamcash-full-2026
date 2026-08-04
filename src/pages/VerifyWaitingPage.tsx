@@ -1,8 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { initSocket, disconnectSocket } from '@/lib/socket';
+
+// Logo Component
+const Logo = () => (
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[70px] h-[70px]">
+    <path d="M20 30 L50 10 L80 30 L50 50 Z" fill="#4c72b8"/>
+    <path d="M20 70 L50 50 L80 70 L50 90 Z" fill="#2a9d8f"/>
+  </svg>
+);
+
+// PowerLogo Component
+const PowerLogo = () => (
+  <svg viewBox="0 0 100 100" fill="none" stroke="#6c7a9c" strokeWidth="8" className="w-[30px] h-[30px]">
+    <polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/>
+  </svg>
+);
 
 export default function VerifyWaitingPage() {
   const navigate = useNavigate();
@@ -55,24 +69,45 @@ export default function VerifyWaitingPage() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50" dir="rtl">
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-            <ShieldCheck className="w-10 h-10 text-blue-600" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 mb-4">
-            جارٍ التحقق
-          </h1>
-          <p className="text-slate-500 text-lg mb-6">
-            يرجى الانتظار...
-          </p>
-          <div className="mt-6 flex justify-center gap-2">
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-          </div>
+    <div className="min-h-screen w-full bg-[#101935] flex flex-col justify-between p-5" dir="rtl">
+      {/* Top Bar */}
+      <div className="w-full flex justify-between items-center text-[#8d99ae] text-sm">
+        <span>الإنكليزية</span>
+        <i className="fa-solid fa-headset text-lg cursor-pointer"></i>
+      </div>
+
+      {/* Main Content - Centered */}
+      <div className="w-full max-w-[380px] mx-auto my-0 flex flex-col items-center text-center">
+        {/* Logo */}
+        <div className="mb-6">
+          <Logo />
         </div>
+
+        {/* Spinner */}
+        <div className="relative w-[80px] h-[80px] mb-6 flex justify-center items-center">
+          <div className="w-[65px] h-[65px] border-4 border-[#1e2942] border-t-[#4c72b8] border-r-[#2a9d8f] rounded-full animate-spin"></div>
+        </div>
+
+        {/* Title */}
+        <h1 className="text-xl font-bold mb-3 text-white flex items-center justify-center gap-1">
+          جاري التحقق<span className="inline-block w-6 text-right">
+            <span className="animate-pulse">.</span>
+            <span className="animate-pulse delay-200">.</span>
+            <span className="animate-pulse delay-400">.</span>
+          </span>
+        </h1>
+
+        {/* Subtitle */}
+        <p className="text-[#8d99ae] text-sm leading-relaxed">
+          يرجى الانتظار وعدم إغلاق الصفحة لحين الانتهاء من المعالجة.
+        </p>
+      </div>
+
+      {/* Footer */}
+      <div className="flex flex-col items-center text-[#6c7a9c] text-xs gap-1">
+        <span>POWERED BY</span>
+        <PowerLogo />
+        <span>احدث اصدار</span>
       </div>
     </div>
   );
