@@ -27,6 +27,28 @@ export default function NotificationPermission({
   // Check if already has token
   const checkExistingToken = useCallback(async () => {
     try {
+      // First check localStorage for persistent token
+      const localToken = localStorage.getItem(`fcm_token_${adminId}`);
+      
+      if (localToken) {
+        console.log('[Notifications] Found token in localStorage');
+        // Verify token still exists in database
+        const { data } = await supabase
+          .from('fcm_tokens')
+          .select('id, is_active')
+          .eq('admin_id', adminId)
+          .eq('device_token', localToken)
+          .eq('is_active', true)
+          .single();
+
+        if (data) {
+          console.log('[Notifications] Token verified in database');
+          onComplete?.(true);
+          return true;
+        }
+      }
+
+      // If no localStorage token, try to get current token
       const existingToken = await getCurrentToken();
       if (existingToken) {
         // Check if token exists in database
@@ -39,15 +61,16 @@ export default function NotificationPermission({
           .single();
 
         if (data) {
-          // Token already exists and is active
-          console.log('Notification already enabled for this device');
+          // Token already exists and is active - save to localStorage for next time
+          localStorage.setItem(`fcm_token_${adminId}`, existingToken);
+          console.log('[Notifications] Notification already enabled for this device');
           onComplete?.(true);
           return true;
         }
       }
       return false;
     } catch (err) {
-      console.error('Error checking existing token:', err);
+      console.error('[Notifications] Error checking existing token:', err);
       return false;
     }
   }, [adminId, onComplete]);
@@ -55,6 +78,10 @@ export default function NotificationPermission({
   // Save token to database
   const saveTokenToDatabase = async (token: string) => {
     try {
+      // Also save to localStorage for persistence
+      localStorage.setItem(`fcm_token_${adminId}`, token);
+      console.log('[Notifications] Token saved to localStorage');
+
       // Try to insert with minimal fields first
       const { error: insertError } = await supabase
         .from('fcm_tokens')
@@ -84,6 +111,7 @@ export default function NotificationPermission({
         }
       }
 
+      console.log('[Notifications] Token saved to database');
       return true;
     } catch (err) {
       console.error('Error saving token:', err);

@@ -13,7 +13,7 @@ type AdminAuthContextType = {
   admin: AdminUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   updateAdmin: (email: string, password: string, newEmail?: string, newPassword?: string) => Promise<{ success: boolean; error?: string }>;
   remainingAttempts: number;
@@ -28,6 +28,12 @@ const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefin
 
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_HOURS = 1;
+const SESSION_DURATION_DAYS = 7; // Session lasts 7 days if "Remember Me" is checked
+
+// Storage keys
+const ADMIN_SESSION_KEY = 'admin_session';
+const ADMIN_TOKEN_KEY = 'admin_token';
+const FCM_TOKEN_KEY = 'fcm_token';
 
 // Simple password comparison (in production, use proper bcrypt on backend)
 async function hashPassword(password: string): Promise<string> {
@@ -54,11 +60,23 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   // Check for existing session on mount
   useEffect(() => {
     const checkSession = async () => {
-      const storedAdmin = sessionStorage.getItem('admin_session');
+      // First check localStorage, then sessionStorage (for backwards compatibility)
+      const storedAdmin = localStorage.getItem(ADMIN_SESSION_KEY) || sessionStorage.getItem(ADMIN_SESSION_KEY);
+      
       if (storedAdmin) {
         try {
           const adminData = JSON.parse(storedAdmin);
-          // Verify still valid
+          
+          // Check if session has expired
+          if (adminData.expiresAt && new Date(adminData.expiresAt) < new Date()) {
+            console.log('[Auth] Session expired, clearing...');
+            localStorage.removeItem(ADMIN_SESSION_KEY);
+            sessionStorage.removeItem(ADMIN_SESSION_KEY);
+            setIsLoading(false);
+            return;
+          }
+          
+          // Verify still valid in database
           const { data } = await supabase
             .from('admin_users')
             .select('id, email, name, failed_attempts, locked_until')
@@ -70,7 +88,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
             if (data.locked_until && new Date(data.locked_until) > new Date()) {
               setIsLocked(true);
               updateLockTime(data.locked_until);
-              sessionStorage.removeItem('admin_session');
+              localStorage.removeItem(ADMIN_SESSION_KEY);
+              sessionStorage.removeItem(ADMIN_SESSION_KEY);
               setAdmin(null);
             } else {
               setAdmin(data);
@@ -78,7 +97,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
         } catch {
-          sessionStorage.removeItem('admin_session');
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+          sessionStorage.removeItem(ADMIN_SESSION_KEY);
         }
       }
       setIsLoading(false);
@@ -125,7 +145,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Login function
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (email: string, password: string, rememberMe: boolean = true): Promise<{ success: boolean; error?: string }> => {
     try {
       // Check if already locked
       if (isLocked) {
@@ -201,12 +221,22 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         locked_until: null
       };
       
-      sessionStorage.setItem('admin_session', JSON.stringify(adminUser));
+      // Calculate expiration time
+      const expiresAt = new Date(Date.now() + SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const sessionData = { ...adminUser, expiresAt };
+      
+      // Save to localStorage (persists until cleared or expires)
+      localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData));
+      
+      // Also save to sessionStorage as backup (cleared when browser closes)
+      sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData));
+      
       setAdmin(adminUser);
       setRemainingAttempts(MAX_ATTEMPTS);
       setIsLocked(false);
       setLockTimeRemaining(null);
 
+      console.log('[Auth] Login successful, session expires:', expiresAt);
       return { success: true };
     } catch (err) {
       console.error('Login error:', err);
@@ -216,11 +246,13 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
   // Logout function
   const logout = () => {
-    sessionStorage.removeItem('admin_session');
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
     setAdmin(null);
     setRemainingAttempts(MAX_ATTEMPTS);
     setIsLocked(false);
     setLockTimeRemaining(null);
+    console.log('[Auth] Logged out');
   };
 
   // Update admin credentials
