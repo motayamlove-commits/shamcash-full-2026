@@ -5,7 +5,7 @@
     "nixpacks": {
       "languages": {
         "node": {
-          "version": "18"
+          "version": "22"
         }
       }
     }
