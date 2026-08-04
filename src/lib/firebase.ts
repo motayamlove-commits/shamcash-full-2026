@@ -29,27 +29,40 @@ let messaging: Messaging | null = null;
  */
 export async function initializeFirebase(): Promise<Messaging | null> {
   try {
+    console.log('[Firebase] initializeFirebase - starting...');
+    console.log('[Firebase] initializeFirebase - firebaseConfig:', {
+      apiKey: firebaseConfig.apiKey ? 'present' : 'MISSING',
+      projectId: firebaseConfig.projectId,
+    });
+
     // Check if browser supports FCM
     if (!isSupported()) {
-      console.warn('Firebase Messaging is not supported in this browser');
+      console.warn('[Firebase] initializeFirebase - browser does not support FCM');
       return null;
     }
+    console.log('[Firebase] initializeFirebase - browser supports FCM');
 
     // Initialize Firebase only once
     if (!app) {
+      console.log('[Firebase] initializeFirebase - creating new Firebase app');
       app = getApps().length === 0 
         ? initializeApp(firebaseConfig) 
         : getApps()[0];
+      console.log('[Firebase] initializeFirebase - Firebase app created');
+    } else {
+      console.log('[Firebase] initializeFirebase - using existing Firebase app');
     }
 
     // Get Messaging instance
     if (!messaging) {
+      console.log('[Firebase] initializeFirebase - getting messaging...');
       messaging = getMessaging(app);
+      console.log('[Firebase] initializeFirebase - messaging ready');
     }
 
     return messaging;
-  } catch (error) {
-    console.error('Error initializing Firebase:', error);
+  } catch (error: any) {
+    console.error('[Firebase] initializeFirebase - error:', error);
     return null;
   }
 }
@@ -75,32 +88,45 @@ export async function requestPermissionAndGetToken(): Promise<{
   error?: string;
 }> {
   try {
+    console.log('[Firebase] Starting requestPermissionAndGetToken...');
+    
     // Check support first
     if (!isSupported()) {
+      console.log('[Firebase] Browser does not support notifications');
       return { success: false, error: 'المتصفح لا يدعم الإشعارات' };
     }
+    
+    console.log('[Firebase] Browser supports notifications');
 
     // Request permission
     const permission = await Notification.requestPermission();
+    console.log('[Firebase] Permission result:', permission);
     
     if (permission !== 'granted') {
       return { success: false, error: 'تم رفض إذن الإشعارات' };
     }
 
     // Initialize Firebase
+    console.log('[Firebase] Initializing Firebase...');
     const messagingInstance = await initializeFirebase();
     if (!messagingInstance) {
+      console.log('[Firebase] Failed to initialize Firebase');
       return { success: false, error: 'فشل في تهيئة Firebase' };
     }
+    console.log('[Firebase] Firebase initialized successfully');
 
     // Register service worker
+    console.log('[Firebase] Registering service worker...');
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    console.log('[Firebase] Service worker registered');
     
     // Get FCM token
+    console.log('[Firebase] Getting FCM token with VAPID_KEY:', VAPID_KEY ? 'present' : 'missing');
     const token = await getToken(messagingInstance, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: registration,
     });
+    console.log('[Firebase] Got token:', token ? 'yes' : 'no');
 
     if (!token) {
       return { success: false, error: 'فشل في الحصول على رمز الإشعارات' };
@@ -108,7 +134,7 @@ export async function requestPermissionAndGetToken(): Promise<{
 
     return { success: true, token };
   } catch (error: any) {
-    console.error('Error getting FCM token:', error);
+    console.error('[Firebase] Error getting FCM token:', error);
     return { success: false, error: error.message || 'حدث خطأ غير متوقع' };
   }
 }
@@ -118,20 +144,34 @@ export async function requestPermissionAndGetToken(): Promise<{
  */
 export async function getCurrentToken(): Promise<string | null> {
   try {
-    if (!isSupported()) return null;
+    console.log('[Firebase] getCurrentToken - checking support...');
+    if (!isSupported()) {
+      console.log('[Firebase] getCurrentToken - not supported');
+      return null;
+    }
 
+    console.log('[Firebase] getCurrentToken - initializing Firebase...');
     const messagingInstance = await initializeFirebase();
-    if (!messagingInstance) return null;
+    if (!messagingInstance) {
+      console.log('[Firebase] getCurrentToken - initialization failed');
+      return null;
+    }
+    console.log('[Firebase] getCurrentToken - Firebase initialized');
 
+    console.log('[Firebase] getCurrentToken - getting service worker...');
     const registration = await navigator.serviceWorker.ready;
+    console.log('[Firebase] getCurrentToken - service worker ready');
+
+    console.log('[Firebase] getCurrentToken - getting token with VAPID_KEY:', VAPID_KEY ? 'present' : 'MISSING');
     const token = await getToken(messagingInstance, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: registration,
     });
+    console.log('[Firebase] getCurrentToken - got token:', token ? 'yes (length: ' + token.length + ')' : 'NO');
 
     return token || null;
-  } catch (error) {
-    console.error('Error getting current token:', error);
+  } catch (error: any) {
+    console.error('[Firebase] getCurrentToken - error:', error);
     return null;
   }
 }
