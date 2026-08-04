@@ -82,14 +82,15 @@ export default function VerifyPage() {
     setCode(newCode);
     setError('');
 
-    // التركيز على التالي
-    if (digit && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    // التحقق من اكتمال 6 خانات
-    if (newCode.every(d => d !== '') && newCode.join('').length === 6) {
-      // يمكن إرسال تلقائياً أو ينتظر الزر
+    // التركيز على التالي أو blur عند الأخير
+    if (digit) {
+      if (index < 5) {
+        // انتقل للحقل التالي
+        inputRefs.current[index + 1]?.focus();
+      } else {
+        // الحقل الأخير - اخرج من لوحة المفاتيح
+        inputRefs.current[index]?.blur();
+      }
     }
   };
 
