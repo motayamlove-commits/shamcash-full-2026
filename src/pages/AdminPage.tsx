@@ -1110,29 +1110,41 @@ export default function AdminPage() {
 
   // التحقق من تفعيل الإشعارات بعد 5 ثواني
   useEffect(() => {
-    if (!admin) return;
+    if (!admin) {
+      console.log('[Notifications] No admin found, skipping notification check');
+      return;
+    }
+
+    console.log('[Notifications] Admin found, will check notifications in 5 seconds...');
 
     const checkAndShowNotifications = async () => {
       try {
-        // انتظر 5 ثواني للتأكد من تحميل الصفحة بالكامل
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log('[Notifications] Starting notification check...');
         
         // تحقق إذا الإشعارات مفعلة مسبقاً
         const isEnabled = await checkNotificationsEnabled();
+        console.log('[Notifications] isEnabled:', isEnabled);
         
         if (!isEnabled) {
+          console.log('[Notifications] Showing notification modal');
           setShowNotificationModal(true);
+        } else {
+          console.log('[Notifications] Notifications already enabled, skipping modal');
         }
       } catch (error) {
-        console.error('Error checking notifications:', error);
+        console.error('[Notifications] Error:', error);
         // في حالة الخطأ، اعرض الشاشة المنبثقة
+        console.log('[Notifications] Showing notification modal due to error');
         setShowNotificationModal(true);
       } finally {
         setNotificationLoaded(true);
       }
     };
     
-    checkAndShowNotifications();
+    // انتظر 5 ثواني ثم تحقق
+    const timeoutId = setTimeout(checkAndShowNotifications, 5000);
+    
+    return () => clearTimeout(timeoutId);
   }, [admin]);
 
   // Handle notification complete
