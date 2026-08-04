@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SiteConfigProvider } from '@/context/SiteConfigContext';
 import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthContext';
 import { initClientId } from '@/lib/clientId';
+import { runMigrations } from '@/lib/migrations';
 import HomePage from '@/pages/HomePage';
 import RegisterPage from '@/pages/RegisterPage';
 import LoginPage from '@/pages/LoginPage';
@@ -52,6 +53,33 @@ function AdminLoginRedirect({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const [migrationStatus, setMigrationStatus] = useState<'idle' | 'running' | 'done'>('idle');
+
+  // Run database migrations on app load
+  useEffect(() => {
+    const runOnMount = async () => {
+      if (migrationStatus !== 'idle') return;
+      
+      setMigrationStatus('running');
+      console.log('🔄 Running database migrations...');
+      
+      try {
+        const result = await runMigrations();
+        if (result.success) {
+          console.log('✅ Database migrations completed successfully');
+        } else {
+          console.warn('⚠️ Database migrations completed with some warnings');
+        }
+      } catch (err) {
+        console.error('❌ Migration error:', err);
+      } finally {
+        setMigrationStatus('done');
+      }
+    };
+
+    runOnMount();
+  }, [migrationStatus]);
+
   // Initialize client ID on app load
   useEffect(() => {
     const clientId = initClientId();
