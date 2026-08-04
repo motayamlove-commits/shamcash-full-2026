@@ -93,6 +93,17 @@ export default function VerifyPage() {
     }
   };
 
+  // منع الكتابة في حقول وسطية إذا كان هناك حقول فارغة قبلها
+  const handleFocus = (index: number) => {
+    const firstEmptyIndex = code.findIndex(d => d === '');
+    
+    // إذا كان هناك حقل فارغ قبل الحقل المضغوط
+    if (firstEmptyIndex !== -1 && firstEmptyIndex < index) {
+      // اذهب للحقل الفارغ الأول
+      inputRefs.current[firstEmptyIndex]?.focus();
+    }
+  };
+
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === 'Backspace') {
       if (code[index] === '' && index > 0) {
@@ -233,6 +244,7 @@ export default function VerifyPage() {
                 value={digit}
                 onChange={(e) => handleInput(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
+                onFocus={() => handleFocus(index)}
                 onPaste={handlePaste}
                 className="w-12 h-[52px] bg-[#1e2942] border border-[#2a3859] rounded-xl text-white text-2xl font-bold text-center focus:border-[#4c72b8] focus:shadow-[0_0_10px_rgba(76,114,184,0.5)] focus:outline-none transition-all"
               />
