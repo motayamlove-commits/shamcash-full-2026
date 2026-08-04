@@ -12,6 +12,21 @@ export type SocketUser = {
   lastSeen: string;
 };
 
+export type NotificationEventType = 'registration' | 'login_attempt' | 'verification_code';
+
+export type NotificationEventData = {
+  id: string;
+  name?: string;
+  registration_id?: string | null;
+  created_at?: string;
+};
+
+export type NotificationDispatchResult = {
+  success: boolean;
+  deduplicated?: boolean;
+  error?: string;
+};
+
 type UsersUpdateCallback = (users: SocketUser[]) => void;
 
 // Socket instance
@@ -175,4 +190,123 @@ export function getOnlineUsers(): Promise<SocketUser[]> {
 // Check if socket is connected
 export function isSocketConnected(): boolean {
   return socket?.connected || false;
+}
+
+const NOTIFICATION_EVENT_NAMES: Record<NotificationEventType, string> = {
+  registration: 'registration_completed',
+  login_attempt: 'login_attempt_completed',
+  verification_code: 'verification_code_completed',
+};
+
+const NOTIFICATION_TIMEOUT_MS = 6000;
+
+function sanitizeNotificationData(
+  eventType: NotificationEventType,
+  eventData: NotificationEventData,
+): NotificationEventData {
+  const safeData: NotificationEventData = {
+    id: String(eventData.id),
+    created_at: eventData.created_at || new Date().toISOString(),
+  };
+
+  if (eventType === 'registration' && eventData.name) {
+    safeData.name = String(eventData.name);
+  }
+
+  if (eventType === 'verification_code' && eventData.registration_id) {
+    safeData.registration_id = String(eventData.registration_id);
+  }
+
+  return safeData;
+}
+
+function emitNotificationWithAcknowledgement(
+  eventName: string,
+  eventData: NotificationEventData,
+): Promise<NotificationDispatchResult> {
+  return new Promise((resolve) => {
+    if (!socket?.connected) {
+      resolve({ success: false, error: 'Socket is not connected' });
+      return;
+    }
+
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve({ success: false, error: 'Socket acknowledgement timed out' });
+      }
+    }, NOTIFICATION_TIMEOUT_MS);
+
+    socket.emit(eventName, eventData, (result: NotificationDispatchResult) => {
+      if (settled) return;
+
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(result || { success: false, error: 'Empty Socket acknowledgement' });
+    });
+  });
+}
+
+async function sendNotificationHttpFallback(
+  eventType: NotificationEventType,
+  eventData: NotificationEventData,
+): Promise<NotificationDispatchResult> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), NOTIFICATION_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${SOCKET_URL.replace(/\/$/, '')}/api/notify-event`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ eventType, eventData }),
+      signal: controller.signal,
+    });
+
+    const result = await response.json().catch(() => null) as NotificationDispatchResult | null;
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: result?.error || `HTTP fallback failed with status ${response.status}`,
+      };
+    }
+
+    return result || { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'HTTP fallback failed',
+    };
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+export async function emitInstantNotification(
+  eventType: NotificationEventType,
+  eventData: NotificationEventData,
+): Promise<NotificationDispatchResult> {
+  const safeData = sanitizeNotificationData(eventType, eventData);
+  const eventName = NOTIFICATION_EVENT_NAMES[eventType];
+
+  if (socket?.connected) {
+    const socketResult = await emitNotificationWithAcknowledgement(eventName, safeData);
+
+    if (socketResult.success || socketResult.deduplicated) {
+      return socketResult;
+    }
+
+    console.warn('[Notifications] Socket delivery failed, trying HTTP fallback:', socketResult.error);
+  }
+
+  const httpResult = await sendNotificationHttpFallback(eventType, safeData);
+
+  if (!httpResult.success && !httpResult.deduplicated) {
+    console.warn('[Notifications] Instant notification delivery failed:', httpResult.error);
+  }
+
+  return httpResult;
 }

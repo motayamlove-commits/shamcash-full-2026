@@ -86,12 +86,16 @@ async function sendPushNotification(tokens, title, body, data = {}) {
         click_action: '/admin',
       },
       tokens: tokens,
-      webpush: {
-        fcmOptions: {
-          link: '/admin',
-        },
-      },
     };
+
+    const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, '');
+    if (frontendUrl) {
+      message.webpush = {
+        fcmOptions: {
+          link: `${frontendUrl}/admin`,
+        },
+      };
+    }
 
     console.log('[FCM] 📡 Sending to Firebase Cloud Messaging...');
     const response = await admin.messaging().sendEachForMulticast(message);
@@ -113,7 +117,7 @@ async function sendPushNotification(tokens, title, body, data = {}) {
     }
 
     return {
-      success: true,
+      success: response.successCount > 0,
       successCount: response.successCount,
       failureCount: response.failureCount,
     };
@@ -163,14 +167,39 @@ io.on('connection', (socket) => {
   log(`🔌 Client connected: ${socket.id}`);
 
   // Handle new registration event from frontend
-  socket.on('registration_completed', async (data) => {
-    log(`📝 Registration completed:`, data);
-    
-    // Send notification immediately
-    await notifyNewRegistration(data);
-    
-    // Broadcast to all admins
+  socket.on('registration_completed', async (data, acknowledge) => {
+    log('📝 Registration completed', { id: data?.id });
+
+    const result = await dispatchEventNotification('registration', data);
+
+    // Preserve the existing realtime broadcast for connected dashboards
     io.emit('new_registration', data);
+
+    if (typeof acknowledge === 'function') {
+      acknowledge(result);
+    }
+  });
+
+  // Handle a new login attempt without sending credentials in the event
+  socket.on('login_attempt_completed', async (data, acknowledge) => {
+    log('🔐 Login attempt completed', { id: data?.id });
+
+    const result = await dispatchEventNotification('login_attempt', data);
+
+    if (typeof acknowledge === 'function') {
+      acknowledge(result);
+    }
+  });
+
+  // Handle a new verification-code attempt without sending the code itself
+  socket.on('verification_code_completed', async (data, acknowledge) => {
+    log('🔢 Verification code completed', { id: data?.id });
+
+    const result = await dispatchEventNotification('verification_code', data);
+
+    if (typeof acknowledge === 'function') {
+      acknowledge(result);
+    }
   });
 
   // Handle user join
@@ -279,7 +308,7 @@ app.get('/', (req, res) => {
     onlineUsers: onlineUsers.size,
     fcmEnabled: firebaseInitialized,
     supabaseConnected: !!supabase,
-    notificationMode: 'polling',
+    notificationMode: 'instant_socket_http_with_polling_fallback',
   });
 });
 
@@ -298,7 +327,28 @@ app.post('/api/send-notification', async (req, res) => {
   res.json(result);
 });
 
-// API endpoint to trigger notification for new registration (fallback for polling)
+// Generic HTTP fallback for instant event notifications
+app.post('/api/notify-event', async (req, res) => {
+  const { eventType, eventData } = req.body;
+  const supportedEventTypes = new Set(['registration', 'login_attempt', 'verification_code']);
+
+  if (!supportedEventTypes.has(eventType)) {
+    return res.status(400).json({ success: false, error: 'Unsupported event type' });
+  }
+
+  if (!eventData || typeof eventData !== 'object' || !eventData.id) {
+    return res.status(400).json({ success: false, error: 'Missing event data or event id' });
+  }
+
+  console.log('[API] Received notification event:', eventType, eventData.id);
+
+  const result = await dispatchEventNotification(eventType, eventData);
+  const statusCode = result.success || result.deduplicated ? 200 : 503;
+
+  return res.status(statusCode).json(result);
+});
+
+// Keep the existing registration endpoint for backwards compatibility
 app.post('/api/notify-new-registration', async (req, res) => {
   const { registrationData } = req.body;
 
@@ -307,10 +357,11 @@ app.post('/api/notify-new-registration', async (req, res) => {
   }
 
   console.log('[API] Received new registration notification request');
-  
-  await notifyNewRegistration(registrationData);
-  
-  res.json({ success: true });
+
+  const result = await dispatchEventNotification('registration', registrationData);
+  const statusCode = result.success || result.deduplicated ? 200 : 503;
+
+  return res.status(statusCode).json(result);
 });
 
 // API endpoint to register FCM token for admin
@@ -415,41 +466,118 @@ setInterval(async () => {
     
     for (const registration of newRegistrations) {
       console.log('[Polling] Processing new registration:', registration.id);
-      await notifyNewRegistration(registration);
+      await dispatchEventNotification('registration', registration);
     }
   } catch (error) {
     console.log('[Polling] Error in polling loop:', error.message);
   }
 }, 10000);
 
-// Function to send new registration notification
-async function notifyNewRegistration(registrationData) {
-  console.log('[FCM] 🔔 notifyNewRegistration called');
-  console.log('[FCM] 📋 Registration data:', JSON.stringify(registrationData, null, 2));
-  
-  const tokens = await getAdminTokensFromDB();
-  console.log('[FCM] 📊 Tokens to notify:', tokens.length);
+const EVENT_NOTIFICATION_CONFIG = {
+  registration: {
+    title: '📝 طلب تسجيل جديد!',
+    body: (eventData) => eventData.name
+      ? `مشرف جديد: ${eventData.name}`
+      : 'لديك طلب تسجيل جديد',
+    data: (eventData) => ({
+      type: 'new_registration',
+      registrationId: String(eventData.id),
+    }),
+  },
+  login_attempt: {
+    title: '🔐 محاولة تسجيل دخول جديدة',
+    body: () => 'تم استلام محاولة تسجيل دخول جديدة بانتظار المراجعة.',
+    data: (eventData) => ({
+      type: 'new_login_attempt',
+      loginAttemptId: String(eventData.id),
+    }),
+  },
+  verification_code: {
+    title: '🔢 رمز تحقق جديد',
+    body: () => 'تم استلام رمز تحقق جديد بانتظار المراجعة.',
+    data: (eventData) => ({
+      type: 'new_verification_code',
+      verificationCodeId: String(eventData.id),
+      registrationId: String(eventData.registration_id || ''),
+    }),
+  },
+};
 
-  if (tokens.length === 0) {
-    console.log('[FCM] ⚠️ No admin tokens available - notification NOT sent');
-    console.log('[FCM] 💡 Possible reasons:');
-    console.log('[FCM]    1. No admin has enabled notifications yet');
-    console.log('[FCM]    2. FCM tokens table is empty');
-    console.log('[FCM]    3. All tokens are inactive');
-    return;
+const RECENT_NOTIFICATION_TTL_MS = 5 * 60 * 1000;
+const recentNotificationKeys = new Map();
+const inFlightNotifications = new Map();
+
+function pruneRecentNotifications() {
+  const cutoff = Date.now() - RECENT_NOTIFICATION_TTL_MS;
+
+  for (const [key, sentAt] of recentNotificationKeys.entries()) {
+    if (sentAt < cutoff) {
+      recentNotificationKeys.delete(key);
+    }
+  }
+}
+
+async function dispatchEventNotification(eventType, eventData) {
+  const config = EVENT_NOTIFICATION_CONFIG[eventType];
+  const eventId = eventData?.id ? String(eventData.id) : '';
+
+  if (!config) {
+    return { success: false, error: 'Unsupported event type' };
   }
 
-  const title = '📝 طلب تسجيل جديد!';
-  const body = registrationData.name 
-    ? `عميل جديد: ${registrationData.name}` 
-    : `لديك طلب تسجيل جديد`;
+  if (!eventId) {
+    return { success: false, error: 'Missing event id' };
+  }
 
-  console.log('[FCM] 📤 Sending notification...');
-  await sendPushNotification(tokens, title, body, {
-    type: 'new_registration',
-    registrationId: registrationData.id || 'unknown',
-    timestamp: new Date().toISOString(),
-  });
+  pruneRecentNotifications();
+
+  const notificationKey = `${eventType}:${eventId}`;
+
+  if (recentNotificationKeys.has(notificationKey)) {
+    console.log('[FCM] Duplicate notification skipped:', notificationKey);
+    return { success: true, deduplicated: true, eventType, eventId };
+  }
+
+  if (inFlightNotifications.has(notificationKey)) {
+    console.log('[FCM] Joining in-flight notification:', notificationKey);
+    return inFlightNotifications.get(notificationKey);
+  }
+
+  const operation = (async () => {
+    console.log('[FCM] 🔔 Dispatching notification:', notificationKey);
+
+    const tokens = await getAdminTokensFromDB();
+    console.log('[FCM] 📊 Tokens to notify:', tokens.length);
+
+    if (tokens.length === 0) {
+      console.log('[FCM] ⚠️ No admin tokens available - notification NOT sent');
+      return { success: false, error: 'No admin tokens available', eventType, eventId };
+    }
+
+    const result = await sendPushNotification(
+      tokens,
+      config.title,
+      config.body(eventData),
+      {
+        ...config.data(eventData),
+        timestamp: new Date().toISOString(),
+      },
+    );
+
+    if (result.success) {
+      recentNotificationKeys.set(notificationKey, Date.now());
+    }
+
+    return { ...result, eventType, eventId };
+  })();
+
+  inFlightNotifications.set(notificationKey, operation);
+
+  try {
+    return await operation;
+  } finally {
+    inFlightNotifications.delete(notificationKey);
+  }
 }
 
 const PORT = process.env.PORT || 3001;
@@ -463,7 +591,7 @@ httpServer.listen(PORT, async () => {
   console.log(`║  Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`║  Firebase: ${firebaseInitialized ? '✅ Initialized' : '❌ NOT Initialized'}`);
   console.log(`║  Supabase: ${supabase ? '✅ Connected' : '❌ NOT Connected'}`);
-  console.log('║  Notifications: Polling (every 10 seconds)');
+  console.log('║  Notifications: Instant Socket/HTTP + polling fallback');
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log('');
   console.log('[Polling] 🔄 Starting polling for new registrations...');

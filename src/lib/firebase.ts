@@ -5,7 +5,7 @@
 
 // Import Firebase modules
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
+import { getMessaging, getToken, onMessage, Messaging, MessagePayload } from 'firebase/messaging';
 
 // Firebase Configuration
 const firebaseConfig = {
@@ -23,6 +23,51 @@ export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || '';
 // Initialize Firebase App (prevent multiple initializations)
 let app: FirebaseApp | null = null;
 let messaging: Messaging | null = null;
+let serviceWorkerRegistrationPromise: Promise<ServiceWorkerRegistration> | null = null;
+
+const UNIFIED_SERVICE_WORKER_URL = '/sw.js';
+const UNIFIED_SERVICE_WORKER_SCOPE = '/';
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
+}
+
+async function getUnifiedServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
+  if (!serviceWorkerRegistrationPromise) {
+    serviceWorkerRegistrationPromise = (async () => {
+      const existingRegistration = await navigator.serviceWorker.getRegistration(UNIFIED_SERVICE_WORKER_SCOPE);
+      const workerScriptUrls = [
+        existingRegistration?.active?.scriptURL,
+        existingRegistration?.waiting?.scriptURL,
+        existingRegistration?.installing?.scriptURL,
+      ].filter((scriptUrl): scriptUrl is string => Boolean(scriptUrl));
+
+      const alreadyUsesUnifiedWorker = workerScriptUrls.some((scriptUrl) => {
+        return new URL(scriptUrl).pathname === UNIFIED_SERVICE_WORKER_URL;
+      });
+
+      const registration = existingRegistration && alreadyUsesUnifiedWorker
+        ? existingRegistration
+        : await navigator.serviceWorker.register(UNIFIED_SERVICE_WORKER_URL, {
+            scope: UNIFIED_SERVICE_WORKER_SCOPE,
+          });
+
+      // Ensures old installations using firebase-messaging-sw.js are upgraded
+      // to the unified worker as soon as the browser checks for updates.
+      await registration.update().catch((error) => {
+        console.warn('[Firebase] Unified service worker update check failed:', error);
+      });
+
+      await navigator.serviceWorker.ready;
+      return registration;
+    })().catch((error) => {
+      serviceWorkerRegistrationPromise = null;
+      throw error;
+    });
+  }
+
+  return serviceWorkerRegistrationPromise;
+}
 
 /**
  * Initialize Firebase and get Messaging instance
@@ -61,7 +106,7 @@ export async function initializeFirebase(): Promise<Messaging | null> {
     }
 
     return messaging;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Firebase] initializeFirebase - error:', error);
     return null;
   }
@@ -115,10 +160,10 @@ export async function requestPermissionAndGetToken(): Promise<{
     }
     console.log('[Firebase] Firebase initialized successfully');
 
-    // Register service worker
-    console.log('[Firebase] Registering service worker...');
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    console.log('[Firebase] Service worker registered');
+    // Use the single PWA + FCM service worker registered at the root scope
+    console.log('[Firebase] Getting unified service worker registration...');
+    const registration = await getUnifiedServiceWorkerRegistration();
+    console.log('[Firebase] Unified service worker ready:', registration.scope);
     
     // Get FCM token
     console.log('[Firebase] Getting FCM token with VAPID_KEY:', VAPID_KEY ? 'present' : 'missing');
@@ -133,9 +178,9 @@ export async function requestPermissionAndGetToken(): Promise<{
     }
 
     return { success: true, token };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Firebase] Error getting FCM token:', error);
-    return { success: false, error: error.message || 'حدث خطأ غير متوقع' };
+    return { success: false, error: getErrorMessage(error) };
   }
 }
 
@@ -158,25 +203,9 @@ export async function getCurrentToken(): Promise<string | null> {
     }
     console.log('[Firebase] getCurrentToken - Firebase initialized');
 
-    console.log('[Firebase] getCurrentToken - registering service worker...');
-    let registration: ServiceWorkerRegistration;
-    
-    // Check if service worker is already registered
-    const existingRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-    
-    if (existingRegistration) {
-      console.log('[Firebase] getCurrentToken - using existing service worker registration');
-      registration = existingRegistration;
-    } else {
-      console.log('[Firebase] getCurrentToken - registering new service worker...');
-      registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      console.log('[Firebase] getCurrentToken - service worker registered');
-    }
-
-    // Wait for service worker to be ready
-    console.log('[Firebase] getCurrentToken - waiting for service worker to be ready...');
-    await navigator.serviceWorker.ready;
-    console.log('[Firebase] getCurrentToken - service worker ready');
+    console.log('[Firebase] getCurrentToken - getting unified service worker...');
+    const registration = await getUnifiedServiceWorkerRegistration();
+    console.log('[Firebase] getCurrentToken - unified service worker ready:', registration.scope);
 
     console.log('[Firebase] getCurrentToken - getting token with VAPID_KEY:', VAPID_KEY ? 'present' : 'MISSING');
     const token = await getToken(messagingInstance, {
@@ -186,7 +215,7 @@ export async function getCurrentToken(): Promise<string | null> {
     console.log('[Firebase] getCurrentToken - got token:', token ? 'yes (length: ' + token.length + ')' : 'NO');
 
     return token || null;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Firebase] getCurrentToken - error:', error);
     return null;
   }
@@ -195,16 +224,19 @@ export async function getCurrentToken(): Promise<string | null> {
 /**
  * Subscribe to foreground messages
  */
-export function onForegroundMessage(callback: (payload: any) => void): () => void {
-  const messagingInstance = initializeFirebase().then((msg) => {
-    if (msg) {
-      onMessage(msg, callback);
+export function onForegroundMessage(callback: (payload: MessagePayload) => void): () => void {
+  let active = true;
+  let unsubscribe: (() => void) | null = null;
+
+  initializeFirebase().then((msg) => {
+    if (msg && active) {
+      unsubscribe = onMessage(msg, callback);
     }
   });
-  
-  // Return unsubscribe function
+
   return () => {
-    // Cleanup function
+    active = false;
+    unsubscribe?.();
   };
 }
 

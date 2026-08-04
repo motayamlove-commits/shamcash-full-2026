@@ -16,6 +16,7 @@ import PageContentEditor from '@/components/cms/PageContentEditor';
 import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
 import SecurityTab from '@/components/cms/SecurityTab';
 import NotificationPermission from '@/components/notifications/NotificationPermission';
+import { useNotifications } from '@/hooks/useNotifications';
 // Socket.io for real-time presence
 import { initSocket, disconnectSocket, onUsersUpdate, SocketUser, getPageDisplayName, isSocketConnected } from '@/lib/socket';
 
@@ -1102,6 +1103,9 @@ export default function AdminPage() {
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationLoaded, setNotificationLoaded] = useState(false);
   const { admin, checkNotificationsEnabled, setNotificationsEnabled } = useAdminAuth();
+
+  // Keep foreground FCM messages active while the admin dashboard is open
+  useNotifications(admin?.id || null);
 
   // تهيئة الأصوات عند تحميل الصفحة
   useEffect(() => {

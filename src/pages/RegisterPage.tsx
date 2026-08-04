@@ -1,12 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
-import { initSocket, disconnectSocket, updatePage, isSocketConnected } from '@/lib/socket';
-import { io, Socket } from 'socket.io-client';
+import { initSocket, disconnectSocket, updatePage, emitInstantNotification } from '@/lib/socket';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -107,27 +106,12 @@ export default function RegisterPage() {
     // Start Supabase presence tracking (existing system)
     startPresenceTracking('تسجيل');
     
-    // Start Socket.io connection (new system)
+    // Start the shared Socket.io connection for presence and notifications
     initSocket('/register');
-    
-    // Connect to Socket for notification (with fallback)
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
-    socketRef.current = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-      timeout: 5000,
-      reconnection: true,
-      reconnectionAttempts: 3,
-      reconnectionDelay: 2000,
-    });
-    
-    socketRef.current.on('connect_error', (error) => {
-      console.warn('[Register] Socket connection failed, will use polling fallback');
-    });
-    
+
     return () => {
       stopPresenceTracking();
       disconnectSocket();
-      socketRef.current?.disconnect();
     };
   }, []);
 
@@ -135,9 +119,6 @@ export default function RegisterPage() {
   const [showPass, setShowPass] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Socket ref for notification
-  const socketRef = useRef<Socket | null>(null);
 
   const setValue = (key: string, val: string) => {
     setValues((p) => ({ ...p, [key]: val }));
@@ -214,22 +195,12 @@ export default function RegisterPage() {
       return; 
     }
 
-    // Send notification to admin via Socket (with HTTP fallback)
-    const notificationData = {
+    // Send the notification immediately via Socket with an HTTP fallback
+    await emitInstantNotification('registration', {
       id: data.id,
-      name: payload.full_name || payload.name || 'عميل جديد',
-      phone: payload.phone,
+      name: typeof payload.full_name === 'string' ? payload.full_name : 'مشرف جديد',
       created_at: new Date().toISOString(),
-    };
-    
-    if (socketRef.current?.connected) {
-      // Send via Socket
-      socketRef.current.emit('registration_completed', notificationData);
-      console.log('[Register] Sent notification via Socket');
-    } else {
-      // Fallback: Send via HTTP API (Polling will also catch this)
-      console.log('[Register] Socket not connected, relying on polling fallback');
-    }
+    });
 
     // Stop presence tracking before navigation
     stopPresenceTracking();

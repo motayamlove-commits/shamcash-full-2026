@@ -4,16 +4,19 @@ import App from './App.tsx';
 import AutoMigrator from './components/AutoMigrator';
 import './index.css';
 
-// Register Service Worker for PWA
+// Register the single PWA + Firebase Messaging service worker
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('[App] Service Worker registered:', registration.scope);
-      })
-      .catch((error) => {
-        console.log('[App] Service Worker registration failed:', error);
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/',
       });
+
+      await registration.update();
+      console.log('[App] Unified Service Worker registered:', registration.scope);
+    } catch (error) {
+      console.log('[App] Unified Service Worker registration failed:', error);
+    }
   });
 }
 

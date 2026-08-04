@@ -1,12 +1,10 @@
-/**
- * Service Worker for Sham Cash PWA
- * Sham Cash - Progressive Web App
+/*
+ * Unified Service Worker for Sham Cash PWA and Firebase Cloud Messaging.
+ * This is the only service worker registered for the root scope.
  */
 
-const CACHE_NAME = 'sham-cash-v1';
-const OFFLINE_URL = '/';
+const CACHE_NAME = 'sham-cash-v2-unified-fcm';
 
-// Assets to cache on install
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -16,183 +14,149 @@ const PRECACHE_ASSETS = [
   '/icons/icon-512x512.png',
 ];
 
-// Install event - cache essential assets
-self.addEventListener('install', (event) => {
-  console.log('[SW] Installing Service Worker...');
-  
+function resolveNotificationUrl(notificationData = {}) {
+  const fcmMessage = notificationData.FCM_MSG || {};
+
+  return notificationData.url
+    || notificationData.click_action
+    || fcmMessage.fcmOptions?.link
+    || fcmMessage.data?.url
+    || fcmMessage.data?.click_action
+    || '/admin';
+}
+
+// Firebase requires a custom click handler to be registered before its scripts
+// are imported; otherwise Firebase may replace the custom behavior.
+self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification clicked');
+  event.notification.close();
+
+  if (event.action === 'close') {
+    return;
+  }
+
+  const rawTargetUrl = resolveNotificationUrl(event.notification.data);
+  const targetUrl = new URL(rawTargetUrl, self.location.origin).href;
+
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Precaching assets...');
-        return cache.addAll(PRECACHE_ASSETS);
-      })
-      .then(() => {
-        console.log('[SW] Skip waiting...');
-        return self.skipWaiting();
-      })
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(async (clientList) => {
+        const existingClient = clientList.find((client) => {
+          return new URL(client.url).origin === self.location.origin;
+        });
+
+        if (existingClient) {
+          if ('navigate' in existingClient) {
+            await existingClient.navigate(targetUrl);
+          }
+
+          if ('focus' in existingClient) {
+            return existingClient.focus();
+          }
+        }
+
+        return self.clients.openWindow(targetUrl);
+      }),
   );
 });
 
-// Activate event - clean old caches
+self.addEventListener('notificationclose', () => {
+  console.log('[SW] Notification closed');
+});
+
+// Use the compat SDK because this public service worker is served without a
+// JavaScript bundling step.
+importScripts('https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/12.17.0/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey: 'AIzaSyB9StmQjkqgKPMhsVZq4eg85AUUxwuFp28',
+  authDomain: 'shamcash-661df.firebaseapp.com',
+  projectId: 'shamcash-661df',
+  storageBucket: 'shamcash-661df.firebasestorage.app',
+  messagingSenderId: '622772155097',
+  appId: '1:622772155097:web:26fbb6ea065feadd1884c8',
+});
+
+const messaging = firebase.messaging();
+
+// The server sends notification + data payloads. Firebase displays those
+// notifications automatically in the background, so this callback must not
+// call showNotification again or the user could receive a duplicate.
+messaging.onBackgroundMessage((payload) => {
+  console.log('[SW] Background FCM message received:', payload.data?.type || 'unknown');
+});
+
+self.addEventListener('install', (event) => {
+  console.log('[SW] Installing unified service worker');
+
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .then(() => self.skipWaiting()),
+  );
+});
+
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating Service Worker...');
-  
+  console.log('[SW] Activating unified service worker');
+
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
             if (cacheName !== CACHE_NAME) {
-              console.log('[SW] Deleting old cache:', cacheName);
               return caches.delete(cacheName);
             }
-          })
+
+            return false;
+          }),
         );
       })
-      .then(() => {
-        console.log('[SW] Claiming clients...');
-        return self.clients.claim();
-      })
+      .then(() => self.clients.claim()),
   );
 });
 
-// Fetch event - network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin)) {
+  // Cache API supports GET requests only. Cross-origin requests such as
+  // Supabase, Socket.IO, Firebase, and Railway must pass through untouched.
+  if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
     return;
   }
 
-  // Handle navigation requests (for PWA routing)
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // Clone and cache the response
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+          if (response.ok) {
+            const responseToCache = response.clone();
+            void caches.open(CACHE_NAME)
+              .then((cache) => cache.put('/index.html', responseToCache));
+          }
+
           return response;
         })
-        .catch(() => {
-          // Return cached index.html for SPA routing
-          return caches.match('/index.html');
-        })
+        .catch(() => caches.match('/index.html')),
     );
     return;
   }
 
-  // For other requests, use network first with cache fallback
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response before caching
-        const responseToCache = response.clone();
-        
-        caches.open(CACHE_NAME)
-          .then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        
+        if (response.ok) {
+          const responseToCache = response.clone();
+          void caches.open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, responseToCache));
+        }
+
         return response;
       })
-      .catch(() => {
-        // Network failed, try cache
-        return caches.match(event.request)
-          .then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            
-            // If it's a navigation request, return the offline page
-            if (event.request.mode === 'navigate') {
-              return caches.match('/index.html');
-            }
-            
-            return new Response('Offline', { status: 503 });
-          });
-      })
+      .catch(async () => {
+        const cachedResponse = await caches.match(event.request);
+        return cachedResponse || new Response('Offline', { status: 503 });
+      }),
   );
 });
 
-// Handle push notifications
-self.addEventListener('push', (event) => {
-  console.log('[SW] Push received:', event);
-  
-  let data = {
-    title: 'شام كاش',
-    body: 'لديك إشعار جديد',
-    icon: '/icons/icon-192x192.png',
-    badge: '/favicon.ico',
-  };
-
-  if (event.data) {
-    try {
-      data = { ...data, ...event.data.json() };
-    } catch (e) {
-      data.body = event.data.text();
-    }
-  }
-
-  const options = {
-    body: data.body,
-    icon: data.icon || '/icons/icon-192x192.png',
-    badge: data.badge || '/favicon.ico',
-    tag: data.tag || 'default',
-    data: data.data || {},
-    dir: 'rtl',
-    lang: 'ar',
-    vibrate: [200, 100, 200],
-    requireInteraction: true,
-    actions: [
-      {
-        action: 'open',
-        title: 'فتح',
-      },
-      {
-        action: 'close',
-        title: 'إغلاق',
-      },
-    ],
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
-});
-
-// Handle notification click
-self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification clicked:', event);
-  
-  event.notification.close();
-
-  const urlToOpen = event.notification.data?.url || 
-                    event.notification.data?.click_action || 
-                    '/admin';
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        // Check if there's already a window open
-        for (const client of clientList) {
-          if (client.url.includes('/admin') && 'focus' in client) {
-            return client.focus();
-          }
-        }
-        // If not, open a new window
-        if (clients.openWindow) {
-          return clients.openWindow(urlToOpen);
-        }
-      })
-  );
-});
-
-// Handle notification close
-self.addEventListener('notificationclose', (event) => {
-  console.log('[SW] Notification closed:', event);
-});
-
-console.log('[SW] Service Worker loaded');
+console.log('[SW] Unified PWA + FCM service worker loaded');
