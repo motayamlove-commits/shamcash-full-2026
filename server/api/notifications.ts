@@ -1,15 +1,40 @@
 /**
  * API Route: Send Push Notification
  * Sham Cash - Admin Push Notifications
+ * 
+ * Uses Firebase Admin SDK for secure server-side messaging
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import * as admin from 'firebase-admin';
 
-// Firebase Cloud Messaging API
-const FCM_API_URL = 'https://fcm.googleapis.com/fcm/send';
+// Initialize Firebase Admin (singleton pattern)
+let firebaseInitialized = false;
 
-// Firebase Server Key (should be in environment variables)
-const SERVER_KEY = process.env.FIREBASE_SERVER_KEY;
+function initializeFirebase() {
+  if (firebaseInitialized) return;
+  
+  if (admin.apps.length === 0) {
+    // Parse service account from environment variable
+    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+    
+    if (serviceAccount) {
+      try {
+        const parsed = JSON.parse(serviceAccount);
+        admin.initializeApp({
+          credential: admin.credential.cert(parsed),
+        });
+        firebaseInitialized = true;
+        console.log('[FCM API] Firebase Admin initialized successfully');
+      } catch (error) {
+        console.error('[FCM API] Error parsing service account:', error);
+        throw new Error('Invalid Firebase service account configuration');
+      }
+    } else {
+      throw new Error('Firebase service account not configured');
+    }
+  }
+}
 
 interface NotificationPayload {
   token?: string;
@@ -26,43 +51,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { token, admin_id, title, body, data } = req.body as NotificationPayload;
+    // Initialize Firebase
+    initializeFirebase();
+
+    const { token, title, body, data } = req.body as NotificationPayload;
 
     // Validate required fields
     if (!title || !body) {
       return res.status(400).json({ error: 'Title and body are required' });
     }
 
-    // If admin_id provided but no token, get token from database
-    let deviceToken = token;
-    
-    if (!deviceToken && admin_id) {
-      // In production, you would fetch the token from Supabase here
-      // For now, we'll require the token to be passed
+    if (!token) {
       return res.status(400).json({ error: 'Device token is required' });
     }
 
-    if (!deviceToken) {
-      return res.status(400).json({ error: 'Device token is required' });
-    }
-
-    // Prepare FCM message
-    const fcmMessage = {
-      to: deviceToken,
+    // Build notification message
+    const message: admin.messaging.Message = {
+      token: token,
       notification: {
         title,
         body,
-        sound: 'default',
-        badge: '1',
       },
       data: {
         ...data,
-        click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        click_action: '/admin',
+      },
+      webpush: {
+        fcmOptions: {
+          link: data?.url || '/admin',
+        },
+        headers: {
+          Urgency: 'high',
+        },
       },
       android: {
         priority: 'high',
         notification: {
-          channel_id: 'sham_cash_notifications',
+          channelId: 'sham_cash_notifications',
           sound: 'default',
           priority: 'high',
         },
@@ -72,57 +97,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           aps: {
             sound: 'default',
             badge: 1,
-            content_available: true,
+            contentAvailable: true,
           },
-        },
-      },
-      webpush: {
-        headers: {
-          Urgency: 'high',
-        },
-        fcm_options: {
-          link: data?.url || '/admin',
         },
       },
     };
 
-    // Send to FCM
-    const response = await fetch(FCM_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `key=${SERVER_KEY}`,
-      },
-      body: JSON.stringify(fcmMessage),
+    // Send notification using Firebase Admin SDK
+    const messageId = await admin.messaging().send(message);
+
+    console.log('[FCM API] Notification sent successfully:', messageId);
+
+    return res.status(200).json({
+      success: true,
+      message_id: messageId,
     });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      console.error('FCM Error:', result);
-      return res.status(500).json({ 
-        error: 'Failed to send notification',
-        details: result 
-      });
-    }
-
-    // Check if notification was successful
-    if (result.success === 1) {
-      return res.status(200).json({ 
-        success: true,
-        message_id: result.results?.[0]?.message_id 
-      });
-    } else {
-      return res.status(400).json({ 
-        error: 'Notification failed',
-        details: result 
-      });
-    }
   } catch (error: any) {
-    console.error('Error sending notification:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message 
+    console.error('[FCM API] Error sending notification:', error);
+
+    // Handle specific Firebase errors
+    if (error.code === 'messaging/registration-token-not-registered') {
+      return res.status(400).json({
+        error: 'Token is no longer valid',
+        code: 'INVALID_TOKEN',
+      });
+    }
+
+    if (error.code === 'messaging/invalid-argument') {
+      return res.status(400).json({
+        error: 'Invalid notification payload',
+        code: 'INVALID_PAYLOAD',
+      });
+    }
+
+    return res.status(500).json({
+      error: 'Failed to send notification',
+      message: error.message,
     });
   }
 }
