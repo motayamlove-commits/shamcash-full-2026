@@ -5,17 +5,10 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase client for database access (without Realtime)
+// Initialize Supabase client for database access
 const supabaseUrl = process.env.SUPABASE_URL || 'https://ckfnijbydegatcsvgtky.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
-const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey, {
-  realtime: {
-    enabled: false // Disable realtime to avoid WebSocket issues
-  }
-}) : null;
-
-// Note: Realtime is disabled due to Node.js 18 WebSocket limitations
-// Notifications will use polling every 10 seconds instead
+const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 if (supabase) {
   console.log('[Supabase] ✅ Connected to Supabase');
