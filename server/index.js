@@ -25,23 +25,35 @@ if (supabase) {
 let firebaseInitialized = false;
 
 function initializeFirebase() {
-  if (firebaseInitialized) return;
+  console.log('[FCM] 🔧 Initializing Firebase Admin SDK...');
+  
+  if (firebaseInitialized) {
+    console.log('[FCM] Already initialized, skipping...');
+    return;
+  }
   
   try {
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+    console.log('[FCM] 📋 FIREBASE_SERVICE_ACCOUNT:', serviceAccount ? 'FOUND' : 'NOT FOUND');
     
     if (serviceAccount) {
       const parsed = JSON.parse(serviceAccount);
+      console.log('[FCM] 📊 Service account project_id:', parsed.project_id);
+      console.log('[FCM] 📊 Service account client_email:', parsed.client_email);
+      
       admin.initializeApp({
         credential: admin.credential.cert(parsed),
       });
       firebaseInitialized = true;
-      console.log('[FCM] Firebase Admin initialized successfully');
+      console.log('[FCM] ✅ Firebase Admin initialized successfully');
     } else {
-      console.log('[FCM] FIREBASE_SERVICE_ACCOUNT not found - notifications disabled');
+      console.log('[FCM] ❌ FIREBASE_SERVICE_ACCOUNT not found in environment variables');
+      console.log('[FCM] 💡 Notifications will NOT work without this');
+      console.log('[FCM] 💡 Please set FIREBASE_SERVICE_ACCOUNT in Railway environment variables');
     }
   } catch (error) {
-    console.log('[FCM] Error initializing Firebase:', error.message);
+    console.log('[FCM] ❌ Error initializing Firebase:', error.message);
+    console.log('[FCM] 💡 Check if FIREBASE_SERVICE_ACCOUNT is valid JSON');
   }
 }
 
@@ -50,17 +62,25 @@ initializeFirebase();
 
 // Function to send push notification
 async function sendPushNotification(tokens, title, body, data = {}) {
+  console.log('[FCM] 🚀 sendPushNotification called');
+  console.log('[FCM] 📝 Title:', title);
+  console.log('[FCM] 📝 Body:', body);
+  console.log('[FCM] 📊 Tokens count:', tokens?.length || 0);
+  
   if (!firebaseInitialized) {
-    console.log('[FCM] Firebase not initialized - skipping notification');
+    console.log('[FCM] ❌ Firebase Admin SDK not initialized');
+    console.log('[FCM] 💡 Check FIREBASE_SERVICE_ACCOUNT environment variable');
     return { success: false, error: 'Firebase not initialized' };
   }
 
   if (!tokens || tokens.length === 0) {
-    console.log('[FCM] No tokens provided - skipping notification');
+    console.log('[FCM] ❌ No tokens provided - skipping notification');
     return { success: false, error: 'No tokens provided' };
   }
 
   try {
+    console.log('[FCM] 📤 Preparing FCM message...');
+    
     const message = {
       notification: {
         title: title,
@@ -78,12 +98,24 @@ async function sendPushNotification(tokens, title, body, data = {}) {
       },
     };
 
+    console.log('[FCM] 📡 Sending to Firebase Cloud Messaging...');
     const response = await admin.messaging().sendEachForMulticast(message);
     
-    console.log('[FCM] Notification sent:', {
-      successCount: response.successCount,
-      failureCount: response.failureCount,
-    });
+    console.log('[FCM] ✅ Firebase response received:');
+    console.log('[FCM]    - Success count:', response.successCount);
+    console.log('[FCM]    - Failure count:', response.failureCount);
+    
+    // Log individual results
+    if (response.responses) {
+      response.responses.forEach((resp, index) => {
+        if (resp.success) {
+          console.log(`[FCM]    ✅ Token ${index + 1}: SUCCESS`);
+        } else {
+          console.log(`[FCM]    ❌ Token ${index + 1}: FAILED`);
+          console.log(`[FCM]       Error:`, resp.error?.message || 'Unknown error');
+        }
+      });
+    }
 
     return {
       success: true,
@@ -91,7 +123,8 @@ async function sendPushNotification(tokens, title, body, data = {}) {
       failureCount: response.failureCount,
     };
   } catch (error) {
-    console.error('[FCM] Error sending notification:', error.message);
+    console.error('[FCM] ❌ Exception while sending:', error.message);
+    console.error('[FCM] 💡 Error details:', error);
     return { success: false, error: error.message };
   }
 }
@@ -283,37 +316,59 @@ function getAdminTokens() {
 
 // Function to get admin tokens from database
 async function getAdminTokensFromDB() {
+  console.log('[FCM] getAdminTokensFromDB called');
+  
   if (!supabase) {
-    console.log('[FCM] Supabase not connected - using memory store');
+    console.log('[FCM] ❌ Supabase not connected - using memory store');
     return getAdminTokens();
   }
 
   try {
+    console.log('[FCM] 📡 Fetching tokens from fcm_tokens table...');
+    
     const { data, error } = await supabase
       .from('fcm_tokens')
-      .select('device_token')
+      .select('id, admin_id, device_token, is_active')
       .eq('is_active', true);
 
     if (error) {
-      console.error('[FCM] Error fetching tokens from DB:', error.message);
+      console.error('[FCM] ❌ Error fetching tokens from DB:', error.message);
+      return getAdminTokens();
+    }
+
+    console.log('[FCM] 📊 Query result:', {
+      count: data?.length || 0,
+      tokens: data?.map(t => ({ id: t.id, admin_id: t.admin_id, token: t.device_token?.substring(0, 20) + '...' }))
+    });
+
+    if (!data || data.length === 0) {
+      console.log('[FCM] ⚠️ No active tokens found in database');
       return getAdminTokens();
     }
 
     const tokens = data.map(row => row.device_token);
-    console.log('[FCM] Fetched', tokens.length, 'tokens from database');
+    console.log('[FCM] ✅ Found', tokens.length, 'active tokens');
     return tokens;
   } catch (error) {
-    console.error('[FCM] Error:', error.message);
+    console.error('[FCM] ❌ Exception:', error.message);
     return getAdminTokens();
   }
 }
 
 // Function to send new registration notification
 async function notifyNewRegistration(registrationData) {
+  console.log('[FCM] 🔔 notifyNewRegistration called');
+  console.log('[FCM] 📋 Registration data:', JSON.stringify(registrationData, null, 2));
+  
   const tokens = await getAdminTokensFromDB();
+  console.log('[FCM] 📊 Tokens to notify:', tokens.length);
 
   if (tokens.length === 0) {
-    console.log('[FCM] No admin tokens - skipping notification');
+    console.log('[FCM] ⚠️ No admin tokens available - notification NOT sent');
+    console.log('[FCM] 💡 Possible reasons:');
+    console.log('[FCM]    1. No admin has enabled notifications yet');
+    console.log('[FCM]    2. FCM tokens table is empty');
+    console.log('[FCM]    3. All tokens are inactive');
     return;
   }
 
@@ -322,6 +377,7 @@ async function notifyNewRegistration(registrationData) {
     ? `عميل جديد: ${registrationData.name}` 
     : `لديك طلب تسجيل جديد`;
 
+  console.log('[FCM] 📤 Sending notification...');
   await sendPushNotification(tokens, title, body, {
     type: 'new_registration',
     registrationId: registrationData.id || 'unknown',
@@ -332,13 +388,21 @@ async function notifyNewRegistration(registrationData) {
 const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, async () => {
-  log(`✅ Socket.io Server running on port ${PORT}`);
-  log(`📡 Health check: http://localhost:${PORT}/`);
-  log(`🔌 Socket.io endpoint: http://localhost:${PORT}/socket.io/`);
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════════╗');
+  console.log('║           🚀 Socket.io Server Started                 ║');
+  console.log('╠══════════════════════════════════════════════════════════╣');
+  console.log(`║  Port: ${PORT}`);
+  console.log(`║  Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`║  Firebase: ${firebaseInitialized ? '✅ Initialized' : '❌ NOT Initialized'}`);
+  console.log(`║  Supabase: ${supabase ? '✅ Connected' : '❌ NOT Connected'}`);
+  console.log(`║  Supabase Realtime: ${supabaseRealtime ? '✅ Connected' : '❌ NOT Connected'}`);
+  console.log('╚══════════════════════════════════════════════════════════╝');
+  console.log('');
 
   // Subscribe to new registrations for FCM notifications
   if (supabaseRealtime) {
-    console.log('[Realtime] Subscribing to registrations table...');
+    console.log('[Realtime] 🔌 Subscribing to registrations table...');
     
     const channel = supabaseRealtime
       .channel('registrations-changes')
@@ -350,7 +414,8 @@ httpServer.listen(PORT, async () => {
           table: 'registrations'
         },
         async (payload) => {
-          console.log('[Realtime] New registration detected:', payload.new);
+          console.log('[Realtime] ✅ New registration detected!');
+          console.log('[Realtime] 📋 Data:', JSON.stringify(payload.new, null, 2));
           
           // Send FCM notification to all admins
           await notifyNewRegistration(payload.new);
@@ -359,10 +424,12 @@ httpServer.listen(PORT, async () => {
           io.emit('new_registration', payload.new);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Realtime] 📡 Subscription status:', status);
+      });
 
-    console.log('[Realtime] Subscribed to registrations changes');
+    console.log('[Realtime] ✅ Subscribed to registrations changes');
   } else {
-    console.log('[Realtime] Supabase not connected - realtime disabled');
+    console.log('[Realtime] ❌ Supabase Realtime not connected - realtime notifications disabled');
   }
 });
