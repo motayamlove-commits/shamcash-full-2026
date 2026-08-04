@@ -1,181 +1,226 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getSiteConfig, setSiteConfig, getFormFields, subscribeToSiteConfig, subscribeToFormFields, FormField } from '@/lib/firestore';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type HeaderConfig = {
-  logo_text: string;
-  logo_subtitle: string;
-};
-
-export type FooterConfig = {
-  brand_description: string;
-  contact_email: string;
-  contact_phone: string;
-  contact_address: string;
-};
-
-export type HomeConfig = {
-  hero_title: string;
-  hero_title_highlight: string;
-  hero_subtitle: string;
-  hero_image: string;
-  button_text: string;
-  button2_text: string;
-  badge_text: string;
-};
-
-export type PageConfig = {
-  title: string;
-  subtitle: string;
-  button_text: string;
-};
-
-export type VerifyConfig = PageConfig & { resend_text: string };
-
-export type ThankYouConfig = {
-  title: string;
-  success_text: string;
-  message: string;
-  button_text: string;
-  button2_text: string;
-};
-
-export type SiteConfig = {
-  header: HeaderConfig;
-  footer: FooterConfig;
-  home: HomeConfig;
-  register: PageConfig;
-  login: PageConfig;
-  verify: VerifyConfig;
-  thank_you: ThankYouConfig;
-};
-
-export type FormField = {
-  id: string;
-  page_key: string;
-  field_key: string;
-  field_type: 'text' | 'email' | 'tel' | 'date' | 'password' | 'number' | 'textarea' | 'select';
-  label: string;
-  placeholder: string;
-  required: boolean;
-  field_order: number;
-  is_hidden: boolean;
-  is_core: boolean;
-};
-
-// ─── Default values (used as fallback) ───────────────────────────────────────
-
-export const DEFAULT_CONFIG: SiteConfig = {
-  header: { logo_text: 'شام كاش', logo_subtitle: 'حلول التمويل' },
-  footer: {
-    brand_description: 'منصة شام كاش للتمويل الشخصي.',
-    contact_email: 'info@shamcash.sy',
-    contact_phone: '+963 11 000 0000',
-    contact_address: 'دمشق، سوريا',
-  },
+// Default configuration
+const DEFAULT_CONFIG = {
   home: {
-    hero_title: 'مرحباً بك في',
-    hero_title_highlight: 'شام كاش',
-    hero_subtitle: 'قدّم طلب تمويلك الآن بكل سهولة وأمان.',
-    hero_image: 'https://images.pexels.com/photos/8441786/pexels-photo-8441786.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
-    button_text: 'تقديم طلب تمويل',
-    button2_text: 'دخول',
-    badge_text: 'منصة التمويل الموثوقة',
+    badge_text: 'نظام طلبات التمويل - شام كاش',
+    hero_title: 'قدم طلبك الآن',
+    hero_title_highlight: 'لتمويلك',
+    hero_subtitle: 'نظام متكامل لإدارة طلبات التمويل باحترافية وأمان تام',
+    hero_image: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&q=80',
+    button_text: 'سجل الآن',
   },
-  register: { title: 'طلب تمويل جديد', subtitle: 'أدخل بياناتك لإرسال طلب التمويل', button_text: 'إرسال الطلب' },
-  login: { title: 'تسجيل الدخول', subtitle: 'أدخل بياناتك للتحقق من طلبك', button_text: 'تسجيل الدخول' },
-  verify: { title: 'رمز التحقق', subtitle: 'أدخل رمز التحقق المرسل لك', button_text: 'تحقق من الرمز', resend_text: 'إعادة إرسال الرمز' },
-  thank_you: {
-    title: 'تهانينا!',
-    success_text: 'تم استلام طلب تمويلك بنجاح',
-    message: 'شكراً لك! تم استلام طلبك وستتم مراجعته قريباً.',
-    button_text: 'العودة للرئيسية',
-    button2_text: 'تقديم طلب جديد',
+  register: {
+    title: 'تسجيل حساب جديد',
+    subtitle: 'أدخل بياناتك الشخصية لإنشاء حساب جديد',
+    button_text: 'إنشاء الحساب',
+  },
+  login: {
+    title: 'تسجيل الدخول',
+    button_text: 'دخول',
+  },
+  verify: {
+    title: 'التحقق من رقم الهاتف',
+    subtitle: 'أدخل رمز التحقق المكون من 6 أرقام',
+    button_text: 'تحقق',
+    resend_text: 'إعادة إرسال الرمز',
+  },
+  thankYou: {
+    title: 'شكراً لك!',
+    message: 'تم استلام طلبك بنجاح',
+    subtitle: 'سيتم مراجعة طلبك والتواصل معك قريباً',
+  },
+  waiting: {
+    title: 'جاري مراجعة طلبك',
+    subtitle: 'يرجى الانتظار حتى يتم مراجعة طلبك من قبل المشرف',
   },
 };
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+export type FormFieldType = {
+  id?: string;
+  pageKey: string;
+  fieldKey: string;
+  label: string;
+  fieldType: string;
+  placeholder?: string;
+  required: boolean;
+  isHidden: boolean;
+  fieldOrder: number;
+};
 
-type ContextType = {
+type SiteConfig = {
+  home: any;
+  register: any;
+  login: any;
+  verify: any;
+  thankYou: any;
+  waiting: any;
+};
+
+type SiteConfigContextType = {
   config: SiteConfig;
-  formFields: FormField[];
-  reload: () => Promise<void>;
+  formFields: FormFieldType[];
+  updateConfig: (key: string, value: any) => Promise<void>;
+  updateFormFields: (pageKey: string, fields: FormFieldType[]) => Promise<void>;
+  loading: boolean;
 };
 
-const SiteConfigContext = createContext<ContextType>({
-  config: DEFAULT_CONFIG,
-  formFields: [],
-  reload: async () => {},
-});
+const SiteConfigContext = createContext<SiteConfigContextType | undefined>(undefined);
 
-export function useSiteConfig() {
-  return useContext(SiteConfigContext);
-}
-
-// ─── Loading screen blocks render until DB data is fetched (prevents flash) ──
-
-function LoadingScreen() {
-  return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-3">
-      <div className="w-9 h-9 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" />
-      <p className="text-slate-400 text-sm font-medium">جاري التحميل...</p>
-    </div>
-  );
-}
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
-export function SiteConfigProvider({ children }: { children: React.ReactNode }) {
+export function SiteConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<SiteConfig>(DEFAULT_CONFIG);
-  const [formFields, setFormFields] = useState<FormField[]>([]);
+  const [formFields, setFormFields] = useState<FormFieldType[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const reload = useCallback(async () => {
-    try {
-      const [cfgRes, ffRes] = await Promise.all([
-        supabase.from('site_config').select('key, value'),
-        supabase.from('form_fields').select('*').order('field_order', { ascending: true }),
-      ]);
-
-      if (cfgRes.data) {
-        const merged = { ...DEFAULT_CONFIG };
-        for (const row of cfgRes.data) {
-          const configKey = row.key as keyof SiteConfig;
-          if (configKey in merged) {
-            (merged as Record<string, unknown>)[configKey] = {
-              ...(merged as Record<string, unknown>)[configKey] as object,
-              ...(row.value as object),
-            };
-          }
-        }
-        setConfig(merged);
-      }
-
-      if (ffRes.data) setFormFields(ffRes.data as FormField[]);
-    } catch (err) {
-      console.error('Reload error:', err);
-    }
+  // Load initial config and form fields
+  useEffect(() => {
+    loadInitialData();
   }, []);
 
+  // Subscribe to real-time updates
   useEffect(() => {
-    reload().finally(() => setLoading(false));
+    // Subscribe to home config
+    const unsubHome = subscribeToSiteConfig('home', (value) => {
+      if (value) {
+        setConfig(prev => ({ ...prev, home: value }));
+      }
+    });
 
-    const channel = supabase
-      .channel('cms-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_config' }, () => reload())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'form_fields' }, () => reload())
-      .subscribe();
+    // Subscribe to register config
+    const unsubRegister = subscribeToSiteConfig('register', (value) => {
+      if (value) {
+        setConfig(prev => ({ ...prev, register: value }));
+      }
+    });
 
-    return () => { supabase.removeChannel(channel); };
-  }, [reload]);
+    // Subscribe to login config
+    const unsubLogin = subscribeToSiteConfig('login', (value) => {
+      if (value) {
+        setConfig(prev => ({ ...prev, login: value }));
+      }
+    });
 
-  // Block render until data is fetched — eliminates content flash
-  if (loading) return <LoadingScreen />;
+    // Subscribe to verify config
+    const unsubVerify = subscribeToSiteConfig('verify', (value) => {
+      if (value) {
+        setConfig(prev => ({ ...prev, verify: value }));
+      }
+    });
+
+    // Subscribe to thankYou config
+    const unsubThankYou = subscribeToSiteConfig('thankYou', (value) => {
+      if (value) {
+        setConfig(prev => ({ ...prev, thankYou: value }));
+      }
+    });
+
+    // Subscribe to waiting config
+    const unsubWaiting = subscribeToSiteConfig('waiting', (value) => {
+      if (value) {
+        setConfig(prev => ({ ...prev, waiting: value }));
+      }
+    });
+
+    // Subscribe to form fields
+    const unsubFields = subscribeToFormFields('register', (fields) => {
+      setFormFields(fields);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubHome();
+      unsubRegister();
+      unsubLogin();
+      unsubVerify();
+      unsubThankYou();
+      unsubWaiting();
+      unsubFields();
+    };
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      // Load all configs
+      const keys = ['home', 'register', 'login', 'verify', 'thankYou', 'waiting'];
+      const configs: Partial<SiteConfig> = {};
+
+      for (const key of keys) {
+        const value = await getSiteConfig(key);
+        if (value) {
+          (configs as any)[key] = value;
+        }
+      }
+
+      setConfig(prev => ({ ...prev, ...configs }));
+
+      // Load form fields
+      const fields = await getFormFields('register');
+      setFormFields(fields);
+    } catch (error) {
+      console.error('Error loading site config:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateConfig = async (key: string, value: any) => {
+    try {
+      await setSiteConfig(key, value);
+      setConfig(prev => ({ ...prev, [key]: value }));
+    } catch (error) {
+      console.error('Error updating config:', error);
+      throw error;
+    }
+  };
+
+  const updateFormFields = async (pageKey: string, fields: FormFieldType[]) => {
+    try {
+      // Save all fields
+      for (const field of fields) {
+        await import('@/lib/firestore').then(({ saveFormField }) => {
+          saveFormField({
+            pageKey: field.pageKey,
+            fieldKey: field.fieldKey,
+            label: field.label,
+            fieldType: field.fieldType,
+            placeholder: field.placeholder,
+            required: field.required,
+            isHidden: field.isHidden,
+            fieldOrder: field.fieldOrder,
+          });
+        });
+      }
+      
+      // Update local state
+      if (pageKey === 'register') {
+        setFormFields(fields);
+      }
+    } catch (error) {
+      console.error('Error updating form fields:', error);
+      throw error;
+    }
+  };
 
   return (
-    <SiteConfigContext.Provider value={{ config, formFields, reload }}>
+    <SiteConfigContext.Provider
+      value={{
+        config,
+        formFields,
+        updateConfig,
+        updateFormFields,
+        loading,
+      }}
+    >
       {children}
     </SiteConfigContext.Provider>
   );
+}
+
+export function useSiteConfig() {
+  const context = useContext(SiteConfigContext);
+  if (context === undefined) {
+    throw new Error('useSiteConfig must be used within a SiteConfigProvider');
+  }
+  return context;
 }

