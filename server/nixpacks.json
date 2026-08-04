@@ -1,11 +1,13 @@
 {
-  "nixpacks": {
-    "startCommand": "node index.js",
-    "phases": {
-      "install": {
-        "nixpkgs": ["nodejs_18"],
-        "cmd": "npm install"
-      }
+  "phases": {
+    "setup": {
+      "nixPkgs": ["nodejs_22"]
+    },
+    "install": {
+      "cmds": ["npm ci --omit=dev"]
     }
+  },
+  "start": {
+    "cmd": "node index.js"
   }
 }
