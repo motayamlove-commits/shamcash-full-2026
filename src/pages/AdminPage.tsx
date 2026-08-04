@@ -787,7 +787,7 @@ function RegistrationsTab() {
                                 </div>
                               </div>
                               
-                              {/* أزرار الموافقة والرفض */}
+                              {/* أزرار الموافقة والرفض وتسجيل الخروج */}
                               {loginStatus === 'pending' && (
                                 <div className="flex gap-2 mt-3">
                                   <button
@@ -802,6 +802,12 @@ function RegistrationsTab() {
                                   >
                                     ✕ رفض
                                   </button>
+                                  <button
+                                    onClick={() => handleLogoutNotice(item.id)}
+                                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1"
+                                  >
+                                    🚪 خروج
+                                  </button>
                                 </div>
                               )}
                               
@@ -812,24 +818,8 @@ function RegistrationsTab() {
                               )}
                               
                               {loginStatus === 'rejected' && (
-                                <div className="mt-3 space-y-2">
-                                  <div className="bg-red-500/20 text-red-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
-                                    ✕ تم الرفض
-                                  </div>
-                                  {item.data.logout_notice !== true && (
-                                    <button
-                                      onClick={() => handleLogoutNotice(item.id)}
-                                      className="w-full bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                                    >
-                                      <span>🚪</span>
-                                      <span>إعلام بتسجيل الخروج</span>
-                                    </button>
-                                  )}
-                                  {item.data.logout_notice === true && (
-                                    <div className="bg-orange-500/20 text-orange-400 text-[10px] font-semibold py-2 px-3 rounded-lg text-center">
-                                      ✓ تم إرسال إشعار تسجيل الخروج
-                                    </div>
-                                  )}
+                                <div className="mt-3 bg-red-500/20 text-red-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
+                                  ✕ تم الرفض
                                 </div>
                               )}
                             </div>
