@@ -55,22 +55,33 @@ export default function NotificationPermission({
   // Save token to database
   const saveTokenToDatabase = async (token: string) => {
     try {
+      // Try to insert with minimal fields first
       const { error: insertError } = await supabase
         .from('fcm_tokens')
-        .upsert({
+        .insert({
           admin_id: adminId,
           device_token: token,
-          device_name: getDeviceName(),
-          device_type: deviceType,
-          is_active: true,
-          last_used_at: new Date().toISOString(),
-        }, {
-          onConflict: 'admin_id,device_token',
         });
 
       if (insertError) {
-        console.error('Error saving token to database:', insertError);
-        return false;
+        console.error('Error saving token (first attempt):', insertError);
+        
+        // Try upsert as fallback
+        const { error: upsertError } = await supabase
+          .from('fcm_tokens')
+          .upsert({
+            admin_id: adminId,
+            device_token: token,
+            is_active: true,
+            last_used_at: new Date().toISOString(),
+          }, {
+            onConflict: 'admin_id,device_token',
+          });
+
+        if (upsertError) {
+          console.error('Error saving token (upsert):', upsertError);
+          return false;
+        }
       }
 
       return true;
