@@ -209,11 +209,11 @@ function sanitizeNotificationData(
     created_at: eventData.created_at || new Date().toISOString(),
   };
 
-  if (eventType === 'registration' && eventData.name) {
+  if (eventData.name) {
     safeData.name = String(eventData.name);
   }
 
-  if (eventType === 'verification_code' && eventData.registration_id) {
+  if (eventData.registration_id && eventType !== 'registration') {
     safeData.registration_id = String(eventData.registration_id);
   }
 

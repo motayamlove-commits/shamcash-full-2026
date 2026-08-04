@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
@@ -207,6 +207,7 @@ export default function RegisterPage() {
     
     sessionStorage.setItem('reg_id', data.id);
     sessionStorage.setItem('reg_email', coreData['email'] || '');
+    sessionStorage.setItem('reg_name', typeof payload.full_name === 'string' ? payload.full_name : '');
     
     // Update Socket.io page before navigation
     updatePage('/login');

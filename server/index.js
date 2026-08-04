@@ -308,7 +308,8 @@ app.get('/', (req, res) => {
     onlineUsers: onlineUsers.size,
     fcmEnabled: firebaseInitialized,
     supabaseConnected: !!supabase,
-    notificationMode: 'instant_socket_http_with_polling_fallback',
+    databaseRealtimeStatus,
+    notificationMode: 'database_realtime_with_socket_http_and_polling_fallback',
   });
 });
 
@@ -382,8 +383,32 @@ app.post('/api/admin/register-token', async (req, res) => {
 // In-memory store for admin FCM tokens
 const adminTokens = new Map();
 
-// Track last check for polling fallback
-let lastRegistrationCheck = new Date().toISOString();
+const DATABASE_EVENT_SOURCES = [
+  {
+    eventType: 'registration',
+    table: 'registrations',
+    select: 'id, full_name, client_id, created_at',
+    broadcastEvent: 'new_registration',
+  },
+  {
+    eventType: 'login_attempt',
+    table: 'login_attempts',
+    select: 'id, registration_id, client_id, email, created_at',
+    broadcastEvent: 'new_login_attempt',
+  },
+  {
+    eventType: 'verification_code',
+    table: 'verification_codes',
+    select: 'id, registration_id, client_id, created_at',
+    broadcastEvent: 'new_verification_code',
+  },
+];
+
+const lastEventChecks = new Map(
+  DATABASE_EVENT_SOURCES.map((source) => [source.eventType, new Date().toISOString()]),
+);
+let databaseRealtimeStatus = 'not_started';
+let databaseEventChannel = null;
 
 // Function to get all admin tokens
 function getAdminTokens() {
@@ -430,75 +455,218 @@ async function getAdminTokensFromDB() {
   }
 }
 
-// Function to check for new registrations (polling fallback)
-async function checkForNewRegistrations() {
+async function checkForNewDatabaseEvents(source) {
   if (!supabase) return [];
+
+  const lastCheck = lastEventChecks.get(source.eventType) || new Date().toISOString();
 
   try {
     const { data, error } = await supabase
-      .from('registrations')
-      .select('*')
-      .gt('created_at', lastRegistrationCheck)
+      .from(source.table)
+      .select(source.select)
+      .gt('created_at', lastCheck)
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.log('[Polling] Error checking registrations:', error.message);
+      console.log(`[Polling] Error checking ${source.table}:`, error.message);
       return [];
     }
 
-    if (data && data.length > 0) {
-      console.log('[Polling] Found', data.length, 'new registrations');
-      lastRegistrationCheck = new Date().toISOString();
-      return data;
+    if (!data || data.length === 0) {
+      return [];
     }
 
-    return [];
+    const lastCreatedAt = data[data.length - 1]?.created_at;
+    if (lastCreatedAt) {
+      lastEventChecks.set(source.eventType, lastCreatedAt);
+    }
+
+    console.log(`[Polling] Found ${data.length} new ${source.table} row(s)`);
+    return data;
   } catch (error) {
-    console.log('[Polling] Error:', error.message);
+    console.log(`[Polling] Exception checking ${source.table}:`, error.message);
     return [];
   }
 }
 
-// Polling interval (every 10 seconds as fallback)
-setInterval(async () => {
-  try {
-    const newRegistrations = await checkForNewRegistrations();
-    
-    for (const registration of newRegistrations) {
-      console.log('[Polling] Processing new registration:', registration.id);
-      await dispatchEventNotification('registration', registration);
+async function pollDatabaseEvents() {
+  for (const source of DATABASE_EVENT_SOURCES) {
+    const newEvents = await checkForNewDatabaseEvents(source);
+
+    for (const eventData of newEvents) {
+      console.log(`[Polling] Processing ${source.eventType}:`, eventData.id);
+      await dispatchEventNotification(source.eventType, eventData);
+      io.emit(source.broadcastEvent, eventData);
     }
-  } catch (error) {
-    console.log('[Polling] Error in polling loop:', error.message);
   }
+}
+
+function startDatabaseEventSubscriptions() {
+  if (!supabase || typeof supabase.channel !== 'function') {
+    databaseRealtimeStatus = 'unavailable';
+    console.log('[Realtime] Supabase Realtime is unavailable; polling remains active');
+    return;
+  }
+
+  databaseEventChannel = supabase.channel('server-instant-notifications');
+
+  for (const source of DATABASE_EVENT_SOURCES) {
+    databaseEventChannel.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: source.table },
+      async (payload) => {
+        const eventData = payload?.new;
+        if (!eventData?.id) return;
+
+        console.log(`[Realtime] New ${source.eventType}:`, eventData.id);
+        await dispatchEventNotification(source.eventType, eventData);
+        io.emit(source.broadcastEvent, eventData);
+      },
+    );
+  }
+
+  databaseEventChannel.subscribe((status) => {
+    databaseRealtimeStatus = status;
+    console.log('[Realtime] Database event subscription status:', status);
+  });
+}
+
+// Polling remains as a fallback if the realtime subscription is interrupted.
+setInterval(() => {
+  pollDatabaseEvents().catch((error) => {
+    console.log('[Polling] Error in database event loop:', error.message);
+  });
 }, 10000);
+
+async function fetchEventRow(eventType, eventId) {
+  if (!supabase || !eventId || eventType === 'registration') return null;
+
+  const table = eventType === 'login_attempt' ? 'login_attempts' : 'verification_codes';
+  const select = eventType === 'login_attempt'
+    ? 'id, registration_id, client_id, email, created_at'
+    : 'id, registration_id, client_id, created_at';
+
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select(select)
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (error) {
+      console.log(`[FCM] Could not fetch ${eventType} row:`, error.message);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.log(`[FCM] Exception fetching ${eventType} row:`, error.message);
+    return null;
+  }
+}
+
+async function findRegistrationForEvent(eventData) {
+  if (!supabase) return null;
+
+  const lookups = [
+    eventData.registration_id
+      ? { column: 'id', value: eventData.registration_id }
+      : null,
+    eventData.client_id
+      ? { column: 'client_id', value: eventData.client_id }
+      : null,
+    eventData.email
+      ? { column: 'email', value: eventData.email }
+      : null,
+  ].filter(Boolean);
+
+  for (const lookup of lookups) {
+    try {
+      const { data, error } = await supabase
+        .from('registrations')
+        .select('id, full_name, client_id, created_at')
+        .eq(lookup.column, lookup.value)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data) {
+        return data;
+      }
+
+      if (error) {
+        console.log(`[FCM] Registration lookup by ${lookup.column} failed:`, error.message);
+      }
+    } catch (error) {
+      console.log(`[FCM] Registration lookup by ${lookup.column} threw:`, error.message);
+    }
+  }
+
+  return null;
+}
+
+async function enrichEventNotificationData(eventType, eventData) {
+  const enrichedData = { ...eventData };
+  const eventId = eventData?.id ? String(eventData.id) : '';
+
+  if (eventType === 'registration') {
+    enrichedData.name = enrichedData.name || enrichedData.full_name || '';
+    enrichedData.registration_id = enrichedData.registration_id || eventId;
+    return enrichedData;
+  }
+
+  const eventRow = await fetchEventRow(eventType, eventId);
+  if (eventRow) {
+    enrichedData.registration_id = enrichedData.registration_id || eventRow.registration_id || null;
+    enrichedData.client_id = enrichedData.client_id || eventRow.client_id || null;
+    enrichedData.email = enrichedData.email || eventRow.email || null;
+    enrichedData.created_at = enrichedData.created_at || eventRow.created_at;
+  }
+
+  const registration = await findRegistrationForEvent(enrichedData);
+  if (registration) {
+    enrichedData.name = enrichedData.name || registration.full_name || '';
+    enrichedData.registration_id = enrichedData.registration_id || registration.id;
+    enrichedData.client_id = enrichedData.client_id || registration.client_id || null;
+  }
+
+  return enrichedData;
+}
 
 const EVENT_NOTIFICATION_CONFIG = {
   registration: {
-    title: '📝 طلب تسجيل جديد!',
+    title: '📝 طلب تسجيل جديد',
     body: (eventData) => eventData.name
-      ? `مشرف جديد: ${eventData.name}`
+      ? `طلب تسجيل جديد للعميل ${eventData.name}`
       : 'لديك طلب تسجيل جديد',
     data: (eventData) => ({
       type: 'new_registration',
-      registrationId: String(eventData.id),
+      registrationId: String(eventData.registration_id || eventData.id),
+      customerName: String(eventData.name || ''),
     }),
   },
   login_attempt: {
-    title: '🔐 محاولة تسجيل دخول جديدة',
-    body: () => 'تم استلام محاولة تسجيل دخول جديدة بانتظار المراجعة.',
+    title: '🔐 تسجيل دخول جديد',
+    body: (eventData) => eventData.name
+      ? `محاولة تسجيل دخول للعميل ${eventData.name}`
+      : 'تم استلام محاولة تسجيل دخول جديدة',
     data: (eventData) => ({
       type: 'new_login_attempt',
       loginAttemptId: String(eventData.id),
+      registrationId: String(eventData.registration_id || ''),
+      customerName: String(eventData.name || ''),
     }),
   },
   verification_code: {
     title: '🔢 رمز تحقق جديد',
-    body: () => 'تم استلام رمز تحقق جديد بانتظار المراجعة.',
+    body: (eventData) => eventData.name
+      ? `وصل رمز تحقق جديد للعميل ${eventData.name}`
+      : 'تم استلام رمز تحقق جديد',
     data: (eventData) => ({
       type: 'new_verification_code',
       verificationCodeId: String(eventData.id),
       registrationId: String(eventData.registration_id || ''),
+      customerName: String(eventData.name || ''),
     }),
   },
 };
@@ -546,6 +714,7 @@ async function dispatchEventNotification(eventType, eventData) {
   const operation = (async () => {
     console.log('[FCM] 🔔 Dispatching notification:', notificationKey);
 
+    const enrichedEventData = await enrichEventNotificationData(eventType, eventData);
     const tokens = await getAdminTokensFromDB();
     console.log('[FCM] 📊 Tokens to notify:', tokens.length);
 
@@ -557,9 +726,9 @@ async function dispatchEventNotification(eventType, eventData) {
     const result = await sendPushNotification(
       tokens,
       config.title,
-      config.body(eventData),
+      config.body(enrichedEventData),
       {
-        ...config.data(eventData),
+        ...config.data(enrichedEventData),
         timestamp: new Date().toISOString(),
       },
     );
@@ -583,6 +752,9 @@ async function dispatchEventNotification(eventType, eventData) {
 const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, async () => {
+  startDatabaseEventSubscriptions();
+  await pollDatabaseEvents();
+
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════╗');
   console.log('║           🚀 Socket.io Server Started                 ║');
@@ -591,8 +763,8 @@ httpServer.listen(PORT, async () => {
   console.log(`║  Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`║  Firebase: ${firebaseInitialized ? '✅ Initialized' : '❌ NOT Initialized'}`);
   console.log(`║  Supabase: ${supabase ? '✅ Connected' : '❌ NOT Connected'}`);
-  console.log('║  Notifications: Instant Socket/HTTP + polling fallback');
+  console.log('║  Notifications: Database Realtime + Socket/HTTP + polling fallback');
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log('');
-  console.log('[Polling] 🔄 Starting polling for new registrations...');
+  console.log('[Polling] 🔄 Polling registrations, login attempts, and verification codes...');
 });
