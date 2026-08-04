@@ -33,6 +33,10 @@ export default function LoginPage() {
     const rejected = sessionStorage.getItem('login_rejected');
     const logoutNotice = sessionStorage.getItem('logout_notice');
     
+    console.log('LoginPage - login_rejected:', rejected);
+    console.log('LoginPage - logout_notice:', logoutNotice);
+    console.log('LoginPage - error:', error);
+    
     if (logoutNotice === 'true') {
       setError('يرجى تسجيل الخروج من تطبيق شام كاش المثبت على جهازك قبل التسجيل هنا');
       sessionStorage.removeItem('logout_notice');

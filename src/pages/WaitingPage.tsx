@@ -47,6 +47,10 @@ export default function WaitingPage() {
           return;
         }
 
+        console.log('checkStatus - data:', data);
+        console.log('checkStatus - status:', data?.status);
+        console.log('checkStatus - logout_notice:', data?.logout_notice);
+
         if (data?.status === 'approved') {
           setStatus('approved');
           clearInterval(dotsInterval);
@@ -57,10 +61,12 @@ export default function WaitingPage() {
           clearInterval(dotsInterval);
           sessionStorage.removeItem('login_attempt_id');
           sessionStorage.setItem('login_rejected', 'true');
+          console.log('Set login_rejected to sessionStorage');
           
           // Check if this is a logout notice
           if (data?.logout_notice) {
             sessionStorage.setItem('logout_notice', 'true');
+            console.log('Set logout_notice to sessionStorage');
           }
           
           setTimeout(() => navigate('/login'), 2000);
