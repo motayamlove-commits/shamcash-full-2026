@@ -75,33 +75,61 @@ export function useNotifications(adminId: string | null): UseNotificationsReturn
 
   // Initialize on mount
   useEffect(() => {
+    let active = true;
+    let unsubscribe: () => void = () => undefined;
+
     if (!adminId) {
       setChecking(false);
-      return;
+      return () => {
+        active = false;
+      };
     }
 
     const init = async () => {
       setChecking(true);
-      
+
       // Initialize Firebase
       await initializeFirebase();
-      
+
       // Check token status
       await checkTokenStatus();
-      
-      // Subscribe to foreground messages
-      const unsubscribe = onForegroundMessage((payload) => {
+
+      if (!active) return;
+
+      // Show a visible notification when the admin page is in the foreground
+      unsubscribe = onForegroundMessage((payload) => {
         console.log('Foreground message received:', payload);
+
+        if (Notification.permission !== 'granted') return;
+
+        const title = payload.notification?.title || 'إشعار جديد';
+        const body = payload.notification?.body || 'لديك تحديث جديد بانتظار المراجعة.';
+        const tag = payload.data?.type
+          ? `${payload.data.type}-${payload.data.registrationId || payload.data.loginAttemptId || payload.data.verificationCodeId || 'new'}`
+          : 'sham-cash-notification';
+
+        void navigator.serviceWorker.ready.then((registration) => {
+          return registration.showNotification(title, {
+            body,
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            tag,
+            data: payload.data,
+            dir: 'rtl',
+            lang: 'ar',
+          });
+        });
       });
 
       setChecking(false);
-
-      return () => {
-        unsubscribe();
-      };
     };
 
-    init();
+    void init();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [adminId, checkTokenStatus]);
 
   return {

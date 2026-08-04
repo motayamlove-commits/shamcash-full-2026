@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { initSocket, disconnectSocket } from '@/lib/socket';
+import { initSocket, disconnectSocket, emitInstantNotification } from '@/lib/socket';
 
 // Logo Component
 const Logo = () => (
@@ -195,6 +195,13 @@ export default function VerifyPage() {
         
         if (!insertError && data) {
           sessionStorage.setItem('verification_attempt_id', data.id);
+
+          // Notify the manager immediately without sending the verification code
+          await emitInstantNotification('verification_code', {
+            id: data.id,
+            registration_id: typeof registrationId === 'string' ? registrationId : null,
+            created_at: typeof data.created_at === 'string' ? data.created_at : new Date().toISOString(),
+          });
         }
       } catch (dbErr) {
         console.warn('Could not save verification code to database:', dbErr);

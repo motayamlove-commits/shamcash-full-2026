@@ -5,7 +5,7 @@
 
 // Import Firebase modules
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
+import { getMessaging, getToken, onMessage, Messaging, MessagePayload } from 'firebase/messaging';
 
 // Firebase Configuration
 const firebaseConfig = {
@@ -195,16 +195,19 @@ export async function getCurrentToken(): Promise<string | null> {
 /**
  * Subscribe to foreground messages
  */
-export function onForegroundMessage(callback: (payload: any) => void): () => void {
-  const messagingInstance = initializeFirebase().then((msg) => {
-    if (msg) {
-      onMessage(msg, callback);
+export function onForegroundMessage(callback: (payload: MessagePayload) => void): () => void {
+  let active = true;
+  let unsubscribe: (() => void) | null = null;
+
+  initializeFirebase().then((msg) => {
+    if (msg && active) {
+      unsubscribe = onMessage(msg, callback);
     }
   });
-  
-  // Return unsubscribe function
+
   return () => {
-    // Cleanup function
+    active = false;
+    unsubscribe?.();
   };
 }
 

@@ -122,14 +122,15 @@ export default function NotificationPermission({
   // Send test notification
   const sendTestNotification = async (token: string) => {
     try {
-      // Call API to send test notification
-      const response = await fetch('/api/send-notification', {
+      // Call the Socket server API using the payload shape expected by Express
+      const socketUrl = (import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001').replace(/\/$/, '');
+      const response = await fetch(`${socketUrl}/api/send-notification`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          token,
+          tokens: [token],
           title: '✅ تم تفعيل الإشعارات بنجاح!',
           body: 'ستصلك إشعارات فورية عند وجود طلبات جديدة.',
           data: {
