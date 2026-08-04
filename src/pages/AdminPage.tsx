@@ -1110,26 +1110,30 @@ export default function AdminPage() {
 
   // التحقق من تفعيل الإشعارات بعد 5 ثواني
   useEffect(() => {
-    const checkNotifications = async () => {
-      if (!admin) return;
-      
-      // انتظر 5 ثواني للتأكد من تحميل الصفحة بالكامل
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      // تحقق إذا الإشعارات مفعلة مسبقاً
-      const isEnabled = await checkNotificationsEnabled();
-      
-      if (!isEnabled) {
+    if (!admin) return;
+
+    const checkAndShowNotifications = async () => {
+      try {
+        // انتظر 5 ثواني للتأكد من تحميل الصفحة بالكامل
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // تحقق إذا الإشعارات مفعلة مسبقاً
+        const isEnabled = await checkNotificationsEnabled();
+        
+        if (!isEnabled) {
+          setShowNotificationModal(true);
+        }
+      } catch (error) {
+        console.error('Error checking notifications:', error);
+        // في حالة الخطأ، اعرض الشاشة المنبثقة
         setShowNotificationModal(true);
+      } finally {
+        setNotificationLoaded(true);
       }
-      
-      setNotificationLoaded(true);
     };
     
-    if (admin) {
-      checkNotifications();
-    }
-  }, [admin, checkNotificationsEnabled]);
+    checkAndShowNotifications();
+  }, [admin]);
 
   // Handle notification complete
   const handleNotificationComplete = (success: boolean) => {

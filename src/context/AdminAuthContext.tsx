@@ -327,20 +327,24 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Check localStorage first
-      const localEnabled = localStorage.getItem('notifications_enabled') === 'true';
+      // Check if we have an FCM token for this browser
+      const { getCurrentToken, initializeFirebase } = await import('@/lib/firebase');
       
-      // Get current FCM token
-      const { getCurrentToken } = await import('@/lib/firebase');
+      // Initialize Firebase
+      await initializeFirebase();
+      
+      // Get current token
       const currentToken = await getCurrentToken();
       
       if (!currentToken) {
+        // No token - notifications not enabled
+        console.log('[Notifications] No FCM token found for this browser');
         setNotificationsEnabledState(false);
         return false;
       }
 
-      // Check if token exists in database
-      const { data } = await supabase
+      // Check if this token exists in database for this admin
+      const { data, error } = await supabase
         .from('fcm_tokens')
         .select('id, is_active')
         .eq('admin_id', admin.id)
@@ -348,11 +352,19 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         .eq('is_active', true)
         .single();
 
-      const isEnabled = localEnabled && !!data;
-      setNotificationsEnabledState(isEnabled);
-      return isEnabled;
+      if (error || !data) {
+        // Token not in database - notifications not enabled
+        console.log('[Notifications] Token not found in database');
+        setNotificationsEnabledState(false);
+        return false;
+      }
+
+      // Token exists and is active - notifications enabled
+      console.log('[Notifications] Token found and active');
+      setNotificationsEnabledState(true);
+      return true;
     } catch (err) {
-      console.error('Error checking notifications:', err);
+      console.error('[Notifications] Error checking notifications:', err);
       setNotificationsEnabledState(false);
       return false;
     }
