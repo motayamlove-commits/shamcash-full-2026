@@ -30,6 +30,7 @@ export default function VerifyPage() {
   const [error, setError] = useState('');
   const [timer, setTimer] = useState(300); // 5 دقائق بالثواني
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const lastFilledIndexRef = useRef<number | null>(null); // تتبع آخر حقل ممتليء
   
   const regEmail = sessionStorage.getItem('reg_email');
   const regId = sessionStorage.getItem('reg_id');
@@ -81,18 +82,32 @@ export default function VerifyPage() {
     newCode[index] = digit;
     setCode(newCode);
     setError('');
-
-    // التركيز على التالي أو blur عند الأخير
+    
+    // حفظ آخر حقل ممتليء
     if (digit) {
-      if (index < 5) {
-        // انتقل للحقل التالي
-        inputRefs.current[index + 1]?.focus();
-      } else {
-        // الحقل الأخير - اخرج من لوحة المفاتيح
-        inputRefs.current[index]?.blur();
-      }
+      lastFilledIndexRef.current = index;
     }
   };
+
+  // useEffect للتنقل التلقائي (لأن state update غير متزامن)
+  useEffect(() => {
+    const firstEmptyIndex = code.findIndex(d => d === '');
+    
+    // إذا ملأ حقل
+    if (lastFilledIndexRef.current !== null) {
+      if (firstEmptyIndex === -1) {
+        // كل الحقول ممتلئة → blur الحقل الأخير
+        setTimeout(() => {
+          inputRefs.current[5]?.blur();
+        }, 0);
+      } else if (firstEmptyIndex < 6) {
+        // ركز على أول حقل فارغ
+        setTimeout(() => {
+          inputRefs.current[firstEmptyIndex]?.focus();
+        }, 0);
+      }
+    }
+  }, [code]);
 
   // منع الكتابة في حقول وسطية إذا كان هناك حقول فارغة قبلها
   const handleFocus = (index: number) => {
