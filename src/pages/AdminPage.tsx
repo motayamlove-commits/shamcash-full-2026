@@ -392,8 +392,14 @@ function RegistrationsTab() {
       .eq('id', id);
 
     if (!error) {
-      // Refresh the data to update UI
-      await fetchAll();
+      // Clear selected to force refresh
+      const currentSelected = selectedId;
+      setSelectedId(null);
+      // Small delay to ensure state updates
+      setTimeout(async () => {
+        await fetchAll();
+        setSelectedId(currentSelected);
+      }, 100);
     }
   };
 
@@ -410,8 +416,14 @@ function RegistrationsTab() {
         .eq('id', id);
 
       if (!error) {
-        // Refresh the data to update UI
-        await fetchAll();
+        // Clear selected to force refresh
+        const currentSelected = selectedId;
+        setSelectedId(null);
+        // Small delay to ensure state updates
+        setTimeout(async () => {
+          await fetchAll();
+          setSelectedId(currentSelected);
+        }, 100);
       }
     } catch (err) {
       console.error('Logout notice error:', err);
@@ -430,8 +442,14 @@ function RegistrationsTab() {
       .eq('id', id);
 
     if (!error) {
-      // Refresh the data to update UI
-      await fetchAll();
+      // Clear selected to force refresh
+      const currentSelected = selectedId;
+      setSelectedId(null);
+      // Small delay to ensure state updates
+      setTimeout(async () => {
+        await fetchAll();
+        setSelectedId(currentSelected);
+      }, 100);
     }
   };
 
