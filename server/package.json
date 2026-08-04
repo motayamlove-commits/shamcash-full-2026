@@ -8,8 +8,10 @@
     "dev": "node index.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "firebase-admin": "^14.2.0",
     "socket.io": "^4.7.2"
   },
   "engines": {
