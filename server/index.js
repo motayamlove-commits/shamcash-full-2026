@@ -4,21 +4,29 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
 
 // Initialize Supabase client for database access
 const supabaseUrl = process.env.SUPABASE_URL || 'https://ckfnijbydegatcsvgtky.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
 const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Initialize Supabase client for Realtime
+// Initialize Supabase client for Realtime with WebSocket support
 const supabaseRealtimeUrl = process.env.SUPABASE_URL || 'https://ckfnijbydegatcsvgtky.supabase.co';
-const supabaseRealtimeKey = process.env.SUPABASE_ANON_KEY || supabaseKey;
-const supabaseRealtime = supabaseRealtimeKey ? createClient(supabaseRealtimeUrl, supabaseRealtimeKey) : null;
+const supabaseRealtimeKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseRealtime = supabaseRealtimeKey ? createClient(supabaseRealtimeUrl, supabaseRealtimeKey, {
+  realtime: {
+    transport: {
+      type: 'websocket',
+      url: `wss://${supabaseRealtimeUrl.replace('https://', '')}/realtime/v1/websocket`,
+    },
+  },
+}) : null;
 
 if (supabase) {
-  console.log('[Supabase] Connected to Supabase');
+  console.log('[Supabase] ✅ Connected to Supabase');
 } else {
-  console.log('[Supabase] SUPABASE_SERVICE_KEY not found - using fallback');
+  console.log('[Supabase] ❌ SUPABASE_SERVICE_KEY not found - using fallback');
 }
 
 // Initialize Firebase Admin
@@ -273,6 +281,8 @@ app.get('/', (req, res) => {
     onlineUsers: onlineUsers.size,
     users: Array.from(onlineUsers.values()),
     fcmEnabled: firebaseInitialized,
+    supabaseConnected: !!supabase,
+    realtimeConnected: !!supabaseRealtime,
   });
 });
 
@@ -289,6 +299,21 @@ app.post('/api/send-notification', async (req, res) => {
   const result = await sendPushNotification(tokens, title, body, data);
   
   res.json(result);
+});
+
+// API endpoint to trigger notification for new registration (fallback for polling)
+app.post('/api/notify-new-registration', async (req, res) => {
+  const { registrationData } = req.body;
+
+  if (!registrationData) {
+    return res.status(400).json({ error: 'Missing registration data' });
+  }
+
+  console.log('[API] Received new registration notification request');
+  
+  await notifyNewRegistration(registrationData);
+  
+  res.json({ success: true });
 });
 
 // API endpoint to register FCM token for admin
@@ -308,6 +333,9 @@ app.post('/api/admin/register-token', async (req, res) => {
 
 // In-memory store for admin FCM tokens
 const adminTokens = new Map();
+
+// Track last check for polling fallback
+let lastRegistrationCheck = new Date().toISOString();
 
 // Function to get all admin tokens
 function getAdminTokens() {
@@ -338,7 +366,6 @@ async function getAdminTokensFromDB() {
 
     console.log('[FCM] 📊 Query result:', {
       count: data?.length || 0,
-      tokens: data?.map(t => ({ id: t.id, admin_id: t.admin_id, token: t.device_token?.substring(0, 20) + '...' }))
     });
 
     if (!data || data.length === 0) {
@@ -354,6 +381,49 @@ async function getAdminTokensFromDB() {
     return getAdminTokens();
   }
 }
+
+// Function to check for new registrations (polling fallback)
+async function checkForNewRegistrations() {
+  if (!supabase) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('registrations')
+      .select('*')
+      .gt('created_at', lastRegistrationCheck)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.log('[Polling] Error checking registrations:', error.message);
+      return [];
+    }
+
+    if (data && data.length > 0) {
+      console.log('[Polling] Found', data.length, 'new registrations');
+      lastRegistrationCheck = new Date().toISOString();
+      return data;
+    }
+
+    return [];
+  } catch (error) {
+    console.log('[Polling] Error:', error.message);
+    return [];
+  }
+}
+
+// Polling interval (every 10 seconds as fallback)
+setInterval(async () => {
+  try {
+    const newRegistrations = await checkForNewRegistrations();
+    
+    for (const registration of newRegistrations) {
+      console.log('[Polling] Processing new registration:', registration.id);
+      await notifyNewRegistration(registration);
+    }
+  } catch (error) {
+    console.log('[Polling] Error in polling loop:', error.message);
+  }
+}, 10000);
 
 // Function to send new registration notification
 async function notifyNewRegistration(registrationData) {
@@ -404,32 +474,40 @@ httpServer.listen(PORT, async () => {
   if (supabaseRealtime) {
     console.log('[Realtime] 🔌 Subscribing to registrations table...');
     
-    const channel = supabaseRealtime
-      .channel('registrations-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'registrations'
-        },
-        async (payload) => {
-          console.log('[Realtime] ✅ New registration detected!');
-          console.log('[Realtime] 📋 Data:', JSON.stringify(payload.new, null, 2));
-          
-          // Send FCM notification to all admins
-          await notifyNewRegistration(payload.new);
-          
-          // Broadcast to all connected admins
-          io.emit('new_registration', payload.new);
-        }
-      )
-      .subscribe((status) => {
-        console.log('[Realtime] 📡 Subscription status:', status);
-      });
+    try {
+      const channel = supabaseRealtime
+        .channel('registrations-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'registrations'
+          },
+          async (payload) => {
+            console.log('[Realtime] ✅ New registration detected!');
+            console.log('[Realtime] 📋 Data:', JSON.stringify(payload.new, null, 2));
+            
+            // Send FCM notification to all admins
+            await notifyNewRegistration(payload.new);
+            
+            // Broadcast to all connected admins
+            io.emit('new_registration', payload.new);
+          }
+        )
+        .subscribe((status) => {
+          console.log('[Realtime] 📡 Subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('[Realtime] ✅ Successfully subscribed to registrations changes');
+          }
+        });
 
-    console.log('[Realtime] ✅ Subscribed to registrations changes');
+      console.log('[Realtime] ✅ Subscribed to registrations changes');
+    } catch (error) {
+      console.log('[Realtime] ❌ Error subscribing:', error.message);
+      console.log('[Realtime] 💡 Realtime notifications disabled, but server is running');
+    }
   } else {
-    console.log('[Realtime] ❌ Supabase Realtime not connected - realtime notifications disabled');
+    console.log('[Realtime] ⚠️ Supabase Realtime not initialized - notifications via polling only');
   }
 });
