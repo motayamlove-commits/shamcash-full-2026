@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, CheckCircle2, User, Mail, Phone, CreditCard, Calendar, Lock, Banknote, Briefcase, MapPin, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getClientId } from '@/lib/clientId';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { startPresenceTracking, stopPresenceTracking } from '@/lib/presence';
-import { initSocket, disconnectSocket, updatePage } from '@/lib/socket';
+import { initSocket, disconnectSocket, updatePage, isSocketConnected } from '@/lib/socket';
+import { io, Socket } from 'socket.io-client';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -109,9 +110,16 @@ export default function RegisterPage() {
     // Start Socket.io connection (new system)
     initSocket('/register');
     
+    // Connect to Socket for notification
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+    socketRef.current = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+    });
+    
     return () => {
       stopPresenceTracking();
       disconnectSocket();
+      socketRef.current?.disconnect();
     };
   }, []);
 
@@ -119,6 +127,9 @@ export default function RegisterPage() {
   const [showPass, setShowPass] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Socket ref for notification
+  const socketRef = useRef<Socket | null>(null);
 
   const setValue = (key: string, val: string) => {
     setValues((p) => ({ ...p, [key]: val }));
@@ -193,6 +204,18 @@ export default function RegisterPage() {
       console.error('Supabase Error:', dbErr);
       setError(dbErr?.message || 'حدث خطأ أثناء التسجيل. حاول مرة أخرى.'); 
       return; 
+    }
+
+    // Send notification to admin via Socket
+    if (socketRef.current?.connected) {
+      const notificationData = {
+        id: data.id,
+        name: payload.full_name || payload.name || 'عميل جديد',
+        phone: payload.phone,
+        created_at: new Date().toISOString(),
+      };
+      socketRef.current.emit('registration_completed', notificationData);
+      console.log('[Register] Sent registration_completed event:', notificationData);
     }
 
     // Stop presence tracking before navigation

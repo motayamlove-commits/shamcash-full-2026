@@ -162,6 +162,17 @@ function broadcastUsers() {
 io.on('connection', (socket) => {
   log(`🔌 Client connected: ${socket.id}`);
 
+  // Handle new registration event from frontend
+  socket.on('registration_completed', async (data) => {
+    log(`📝 Registration completed:`, data);
+    
+    // Send notification immediately
+    await notifyNewRegistration(data);
+    
+    // Broadcast to all admins
+    io.emit('new_registration', data);
+  });
+
   // Handle user join
   socket.on('user_online', (data) => {
     const { clientId, page } = data;
