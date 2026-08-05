@@ -1,18 +1,7 @@
 /*
- * Unified Service Worker for Sham Cash PWA and Firebase Cloud Messaging.
- * This is the only service worker registered for the root scope.
+ * Service Worker for Sham Cash PWA and Firebase Cloud Messaging.
+ * CACHING DISABLED - All requests go directly to server.
  */
-
-const CACHE_NAME = 'sham-cash-v2-unified-fcm';
-
-const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-];
 
 function resolveNotificationUrl(notificationData = {}) {
   const fcmMessage = notificationData.FCM_MSG || {};
@@ -81,95 +70,30 @@ try {
 
   const messaging = firebase.messaging();
 
-  // The server sends notification + data payloads. Firebase displays those
-  // notifications automatically in the background, so this callback must not
-  // call showNotification again or the user could receive a duplicate.
   messaging.onBackgroundMessage((payload) => {
     console.log('[SW] Background FCM message received:', payload.data?.type || 'unknown');
   });
-  
+
   console.log('[SW] Firebase Messaging initialized');
 } catch (error) {
   console.warn('[SW] Firebase Messaging not available:', error);
 }
 
-self.addEventListener('install', (event) => {
-  console.log('[SW] Installing unified service worker');
-
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting()),
-  );
+// CACHING DISABLED - No caching, all requests go to server
+self.addEventListener('fetch', (event) => {
+  // Let all requests pass through to the network
+  // No caching at all - always get latest version from server
+  return;
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating unified service worker');
-
-  event.waitUntil(
-    caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_NAME) {
-              return caches.delete(cacheName);
-            }
-
-            return false;
-          }),
-        );
-      })
-      .then(() => self.clients.claim()),
-  );
+  console.log('[SW] Activating service worker');
+  event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('fetch', (event) => {
-  // Cache API supports GET requests only. Cross-origin requests such as
-  // Supabase, Socket.IO, Firebase, and Railway must pass through untouched.
-  if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
-    return;
-  }
-
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const responseToCache = response.clone();
-            void caches.open(CACHE_NAME)
-              .then((cache) => cache.put('/index.html', responseToCache));
-          }
-
-          return response;
-        })
-        .catch(() => caches.match('/index.html')),
-    );
-    return;
-  }
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok) {
-          const responseToCache = response.clone();
-          void caches.open(CACHE_NAME)
-            .then((cache) => cache.put(event.request, responseToCache));
-        }
-
-        return response;
-      })
-      .catch(async () => {
-        const cachedResponse = await caches.match(event.request);
-        return cachedResponse || new Response('Offline', { status: 503 });
-      }),
-  );
+self.addEventListener('install', (event) => {
+  console.log('[SW] Installing service worker');
+  event.waitUntil(self.skipWaiting());
 });
 
-// Handle skip waiting message from main app
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
-console.log('[SW] Unified PWA + FCM service worker loaded');
+console.log('[SW] PWA + FCM service worker loaded (CACHING DISABLED)');
