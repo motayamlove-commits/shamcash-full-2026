@@ -477,14 +477,30 @@ function RegistrationsTab() {
 
   const selected = registrations.find((r) => r.id === selectedId);
 
+  // Swipe gesture for mobile back
+  const touchStartX = useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchEndX - touchStartX.current;
+    // Swipe right (RTL) to go back
+    if (diff > 70) {
+      setSelectedId(null);
+    }
+    touchStartX.current = null;
+  };
+
   return (
-    <div id="admin-panel" className="flex flex-col flex-1 overflow-hidden text-right" dir="rtl" style={{ width: '100%', maxWidth: '100%', padding: 0, margin: 0 }}>
+    <div id="admin-panel" className="flex flex-col flex-1 overflow-hidden text-right p-[10px] md:p-0" dir="rtl" style={{ width: '100%', maxWidth: '100%', margin: 0 }}>
 
       {/* ── Split panel ── */}
-      <div className="flex-1 flex overflow-hidden min-h-0" style={{ padding: 0 }}>
+      <div className="flex-1 flex overflow-hidden min-h-0 rounded-xl md:rounded-none border border-slate-700 md:border-none" style={{ padding: 0 }}>
 
         {/* ── LEFT: Registration list (40%) ── */}
-        <div className={`${isPanelCollapsed ? 'w-[50px]' : 'w-[40%]'} flex flex-col bg-slate-800 border-l border-slate-700 overflow-hidden transition-all duration-300`} style={{ margin: 0, padding: 0 }}>
+        <div className={`${selectedId ? 'hidden md:flex' : 'flex'} ${isPanelCollapsed ? 'md:w-[50px]' : 'md:w-[40%]'} w-full flex-col bg-slate-800 border-l border-slate-700 overflow-hidden transition-all duration-300`} style={{ margin: 0, padding: 0 }}>
           {/* Collapsed Toolbar */}
           {isPanelCollapsed ? (
             <div className="flex flex-col items-center py-3 gap-3">
@@ -638,10 +654,24 @@ function RegistrationsTab() {
         </div>
 
         {/* ── RIGHT: Detail panel (60%) ── */}
-        <div className="flex-1 flex flex-col bg-slate-800 overflow-hidden" style={{ margin: 0, padding: 0 }}>
+        <div 
+          className={`${selectedId ? 'flex' : 'hidden md:flex'} flex-1 flex flex-col bg-slate-800 overflow-hidden`} 
+          style={{ margin: 0, padding: 0 }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <div className="shrink-0 px-5 py-3.5 border-b border-slate-700 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-blue-400" />
-            <h2 className="font-bold text-white text-sm">{selected ? `تفاصيل: ${selected.full_name || 'المستخدم'}` : 'تفاصيل المستخدم'}</h2>
+            {/* Back button for mobile */}
+            <button 
+              onClick={() => setSelectedId(null)}
+              className="md:hidden p-1.5 ml-1 rounded-lg bg-slate-700 text-slate-300 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <Shield className="w-4 h-4 text-blue-400 shrink-0" />
+            <h2 className="font-bold text-white text-sm truncate">{selected ? `تفاصيل: ${selected.full_name || 'المستخدم'}` : 'تفاصيل المستخدم'}</h2>
           </div>
 
           <div className="flex-1 overflow-y-auto">
