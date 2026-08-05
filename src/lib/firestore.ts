@@ -20,6 +20,11 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase-config';
 
+// Helper to check if db is available
+const isDbAvailable = (): boolean => {
+  return db !== null && db !== undefined;
+};
+
 // ═══════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════

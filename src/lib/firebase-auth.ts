@@ -89,23 +89,29 @@ export const signOutAdmin = async (): Promise<void> => {
  * Listen to auth state changes
  */
 export const onAuthChange = (callback: (user: AdminUser | null) => void): (() => void) => {
-  if (!isAuthAvailable()) {
+  if (!isAuthAvailable() || !auth) {
     callback(null);
     return () => {};
   }
   
-  return onAuthStateChanged(auth, (firebaseUser) => {
-    if (firebaseUser) {
-      callback({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || '',
-        displayName: firebaseUser.displayName || undefined,
-        createdAt: new Date(firebaseUser.metadata.creationTime || Date.now()),
-      });
-    } else {
-      callback(null);
-    }
-  });
+  try {
+    return onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        callback({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          displayName: firebaseUser.displayName || undefined,
+          createdAt: new Date(firebaseUser.metadata.creationTime || Date.now()),
+        });
+      } else {
+        callback(null);
+      }
+    });
+  } catch (error) {
+    console.warn('[Firebase Auth] onAuthStateChanged failed:', error);
+    callback(null);
+    return () => {};
+  }
 };
 
 /**
