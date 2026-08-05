@@ -117,6 +117,13 @@ function RegistrationsTab() {
   // Login attempts
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
 
+  // Panel collapsed state
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  
+  // New attempts count (for badge when panel is collapsed)
+  const [newAttemptsCount, setNewAttemptsCount] = useState(0);
+  const [seenAttemptIds, setSeenAttemptIds] = useState<Set<string>>(new Set());
+
   // Current time state for time-ago updates (refreshes every minute)
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -145,6 +152,16 @@ function RegistrationsTab() {
     });
     return new Date(latest.created_at);
   };
+
+  // Sort registrations by most recent activity (newest first)
+  const sortedRegistrations = [...registrations].sort((a, b) => {
+    const timeA = getLatestActivityTime(a);
+    const timeB = getLatestActivityTime(b);
+    if (!timeA && !timeB) return 0;
+    if (!timeA) return 1;
+    if (!timeB) return -1;
+    return timeB.getTime() - timeA.getTime();
+  });
 
   // Use Firestore for real-time updates (when Supabase is not configured)
   const { registrations: firestoreRegistrations, loginAttempts: firestoreLoginAttempts, refresh: refreshFirestore } = useFirestoreAdmin();
@@ -208,8 +225,26 @@ function RegistrationsTab() {
         
         return [...updatedRegs, ...newRegistrations];
       });
+      
+      // Track new attempts (those not seen yet)
+      const allAttemptIds = firestoreLoginAttempts.map(a => a.id);
+      const newUnseen = allAttemptIds.filter(id => !seenAttemptIds.has(id));
+      if (newUnseen.length > 0) {
+        setNewAttemptsCount(prev => prev + newUnseen.length);
+        // Play sound for new attempts
+        playLoginAttemptSound();
+      }
     }
-  }, [firestoreLoginAttempts]);
+  }, [firestoreLoginAttempts, seenAttemptIds]);
+
+  // When panel is expanded, mark all as seen
+  useEffect(() => {
+    if (!isPanelCollapsed && loginAttempts.length > 0) {
+      const allIds = loginAttempts.map(a => a.id);
+      setSeenAttemptIds(new Set(allIds));
+      setNewAttemptsCount(0);
+    }
+  }, [isPanelCollapsed, loginAttempts]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -531,125 +566,157 @@ function RegistrationsTab() {
       <div className="flex-1 flex overflow-hidden min-h-0" style={{ padding: 0 }}>
 
         {/* ── LEFT: Registration list (40%) ── */}
-        <div className="w-[40%] flex flex-col bg-slate-800 border-l border-slate-700 overflow-hidden" style={{ margin: 0, padding: 0 }}>
-          {/* Toolbar */}
-          <div className="shrink-0 px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <Activity className="w-4 h-4 text-blue-400 shrink-0" />
-              <span className="font-bold text-white text-sm truncate">سجل التسجيلات</span>
-              <span className="bg-slate-700 text-slate-400 text-xs px-2 py-0.5 rounded-full shrink-0">
-                {registrations.length}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${connected ? 'bg-green-900/60 text-green-400' : 'bg-red-900/60 text-red-400'}`}>
-                {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                <span className="hidden sm:inline">{connected ? 'مباشر' : 'منقطع'}</span>
-              </div>
-              <button onClick={fetchAll} className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors">
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+        <div className={`${isPanelCollapsed ? 'w-[50px]' : 'w-[40%]'} flex flex-col bg-slate-800 border-l border-slate-700 overflow-hidden transition-all duration-300`} style={{ margin: 0, padding: 0 }}>
+          {/* Collapsed Toolbar */}
+          {isPanelCollapsed ? (
+            <div className="flex flex-col items-center py-3 gap-3">
+              <Activity className="w-5 h-5 text-blue-400" />
+              <button 
+                onClick={() => setIsPanelCollapsed(false)}
+                className="relative p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                {/* New attempts badge */}
+                {newAttemptsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                    {newAttemptsCount > 9 ? '9+' : newAttemptsCount}
+                  </span>
+                )}
               </button>
+              <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
             </div>
-          </div>
-          
-          {/* Bulk Actions Toolbar */}
-          <div className="shrink-0 px-4 py-2 border-b border-slate-700 bg-slate-800/80 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.size === registrations.length && registrations.length > 0}
-                  onChange={toggleSelectAll}
-                  className="w-4 h-4 accent-blue-500 rounded"
-                  disabled={registrations.length === 0}
-                />
-                <span className="text-xs text-slate-400 font-medium">تحديد الكل</span>
-              </label>
-            </div>
-            {selectedIds.size > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">
-                  ({selectedIds.size}) محدد
-                </span>
-                <button
-                  onClick={() => setShowDeleteModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  حذف
-                </button>
+          ) : (
+            <>
+              {/* Expanded Toolbar */}
+              <div className="shrink-0 px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Activity className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span className="font-bold text-white text-sm truncate">سجل التسجيلات</span>
+                  <span className="bg-slate-700 text-slate-400 text-xs px-2 py-0.5 rounded-full shrink-0">
+                    {registrations.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button 
+                    onClick={() => setIsPanelCollapsed(true)}
+                    className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${connected ? 'bg-green-900/60 text-green-400' : 'bg-red-900/60 text-red-400'}`}>
+                    {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                    <span className="hidden sm:inline">{connected ? 'مباشر' : 'منقطع'}</span>
+                  </div>
+                  <button onClick={fetchAll} className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors">
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-700/40">
-                {registrations.map((reg) => {
-                  const isSelected = reg.id === selectedId;
-                  const isBulkSelected = selectedIds.has(reg.id);
-                  const name = reg.full_name || 'بدون اسم';
-                  
-                  // Check if this registration's client is currently online
-                  const socketPresence = reg.client_id ? socketUsers.find(u => u.clientId === reg.client_id) : null;
-                  const isOnline = !!socketPresence;
-                  const currentPage = socketPresence?.page || '';
-                  
-                  return (
-                    <div 
-                      key={reg.id} 
-                      className={`w-full text-right px-4 py-3.5 flex items-center gap-3 transition-all group ${reg._new ? 'bg-blue-500/10 border-r-2 border-blue-400' : isSelected ? 'bg-slate-700/80 border-r-2 border-blue-500' : 'hover:bg-slate-700/40 border-r-2 border-transparent'}`}
+              
+              {/* Bulk Actions Toolbar */}
+              <div className="shrink-0 px-4 py-2 border-b border-slate-700 bg-slate-800/80 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === sortedRegistrations.length && sortedRegistrations.length > 0}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 accent-blue-500 rounded"
+                      disabled={sortedRegistrations.length === 0}
+                    />
+                    <span className="text-xs text-slate-400 font-medium">تحديد الكل</span>
+                  </label>
+                </div>
+                {selectedIds.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">
+                      ({selectedIds.size}) محدد
+                    </span>
+                    <button
+                      onClick={() => setShowDeleteModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-colors"
                     >
-                      <input
-                        type="checkbox"
-                        checked={isBulkSelected}
-                        onChange={() => toggleSelect(reg.id)}
-                        className="w-4 h-4 accent-blue-500 rounded shrink-0"
-                      />
-                      <button 
-                        onClick={() => setSelectedId(isSelected ? null : reg.id)}
-                        className="flex items-center gap-3 flex-1 min-w-0"
-                      >
-                        <div className={`w-9 h-9 rounded-full ${avatarColor(name)} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md`}>
-                          {name.charAt(0)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 justify-between">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
-                              {isOnline && currentPage && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 shrink-0">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                                  متصل - {getPageDisplayName(currentPage)}
-                                </span>
-                              )}
-                              {!isOnline && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400 shrink-0">
-                                  غير متصل
-                                </span>
-                              )}
-                            </div>
-                            {/* Time on the left side */}
-                            <span className="text-xs text-slate-500 shrink-0">
-                              {(() => {
-                                const latestTime = getLatestActivityTime(reg);
-                                return latestTime ? formatTimeAgo(latestTime) : '';
-                              })()}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
-                        </div>
-                      </button>
-                    </div>
-                  );
-                })}
+                      <Trash2 className="w-3.5 h-3.5" />
+                      حذف
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+
+              <div className="flex-1 overflow-y-auto">
+                {loading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-700/40">
+                    {sortedRegistrations.map((reg) => {
+                      const isSelected = reg.id === selectedId;
+                      const isBulkSelected = selectedIds.has(reg.id);
+                      const name = reg.full_name || 'بدون اسم';
+                      
+                      // Check if this registration's client is currently online
+                      const socketPresence = reg.client_id ? socketUsers.find(u => u.clientId === reg.client_id) : null;
+                      const isOnline = !!socketPresence;
+                      const currentPage = socketPresence?.page || '';
+                      
+                      return (
+                        <div 
+                          key={reg.id} 
+                          className={`w-full text-right px-4 py-3.5 flex items-center gap-3 transition-all group ${reg._new ? 'bg-blue-500/10 border-r-2 border-blue-400' : isSelected ? 'bg-slate-700/80 border-r-2 border-blue-500' : 'hover:bg-slate-700/40 border-r-2 border-transparent'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isBulkSelected}
+                            onChange={() => toggleSelect(reg.id)}
+                            className="w-4 h-4 accent-blue-500 rounded shrink-0"
+                          />
+                          <button 
+                            onClick={() => setSelectedId(isSelected ? null : reg.id)}
+                            className="flex items-center gap-3 flex-1 min-w-0"
+                          >
+                            <div className={`w-9 h-9 rounded-full ${avatarColor(name)} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md`}>
+                              {name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 justify-between">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-200 group-hover:text-white'}`}>{name}</span>
+                                  {isOnline && currentPage && (
+                                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 shrink-0">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                      متصل - {getPageDisplayName(currentPage)}
+                                    </span>
+                                  )}
+                                  {!isOnline && (
+                                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400 shrink-0">
+                                      غير متصل
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Time on the left side */}
+                                <span className="text-xs text-slate-500 shrink-0">
+                                  {(() => {
+                                    const latestTime = getLatestActivityTime(reg);
+                                    return latestTime ? formatTimeAgo(latestTime) : '';
+                                  })()}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
+                            </div>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── RIGHT: Detail panel (60%) ── */}
