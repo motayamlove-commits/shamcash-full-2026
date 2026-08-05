@@ -192,7 +192,12 @@ export default function LoginPage() {
           {/* Forgot Password Link */}
           <div className="w-full text-center text-[13px] text-[#8d99ae] mb-5">
             هل نسيت كلمة المرور؟{' '}
-            <span className="text-[#4a7c59] font-bold cursor-pointer hover:underline">تغيير كلمة المرور</span>
+            <span 
+              onClick={() => navigate('/forgot-password')}
+              className="text-[#4a7c59] font-bold cursor-pointer hover:underline"
+            >
+              تغيير كلمة المرور
+            </span>
           </div>
 
           {/* Action Buttons */}

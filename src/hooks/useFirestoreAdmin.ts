@@ -11,7 +11,9 @@ import {
   VerificationCode,
   Timestamp,
   isDbAvailable,
+  db,
 } from '@/lib/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 // Transform Firestore data to match AdminPage format
 type AdminRegistration = {
@@ -96,10 +98,20 @@ function transformLoginAttempt(login: LoginAttempt): AdminLoginAttempt {
   };
 }
 
+type PasswordResetRequest = {
+  id: string;
+  contact: string;
+  clientId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: any;
+  created_at: string;
+};
+
 type FirestoreAdminData = {
   registrations: AdminRegistration[];
   loginAttempts: AdminLoginAttempt[];
   verificationCodes: AdminVerificationCode[];
+  passwordResets: PasswordResetRequest[];
   loading: boolean;
   error: string | null;
 };
@@ -110,6 +122,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
   const [registrations, setRegistrations] = useState<AdminRegistration[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<AdminLoginAttempt[]>([]);
   const [verificationCodes, setVerificationCodes] = useState<AdminVerificationCode[]>([]);
+  const [passwordResets, setPasswordResets] = useState<PasswordResetRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -159,6 +172,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     let unsubUsers: (() => void) | null = null;
     let unsubLogins: (() => void) | null = null;
     let unsubCodes: (() => void) | null = null;
+    let unsubResets: (() => void) | null = null;
 
     console.log('[useFirestoreAdmin] Component mounted, checking Firebase:', isDbAvailable());
 
@@ -188,10 +202,20 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
       // Subscribe to verification codes changes
       unsubCodes = subscribeToVerificationCodes((codes) => {
         console.log('[useFirestoreAdmin] Verification codes updated:', codes.length);
-        console.log('[useFirestoreAdmin] Sample code:', codes[0]);
         if (isActive) {
           setVerificationCodes(codes.map(transformVerificationCode));
         }
+      });
+
+      // Subscribe to password reset requests
+      const resetsQuery = query(collection(db!, 'passwordResets'), orderBy('createdAt', 'desc'));
+      unsubResets = onSnapshot(resetsQuery, (snapshot) => {
+        const resets = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          created_at: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
+        })) as PasswordResetRequest[];
+        if (isActive) setPasswordResets(resets);
       });
     };
 
@@ -202,6 +226,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
       unsubUsers?.();
       unsubLogins?.();
       unsubCodes?.();
+      unsubResets?.();
     };
   }, [refresh]);
 
@@ -209,6 +234,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     registrations,
     loginAttempts,
     verificationCodes,
+    passwordResets,
     loading,
     error,
     refresh,

