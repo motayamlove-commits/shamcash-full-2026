@@ -1,5 +1,5 @@
-import { supabase } from './supabase';
 import { getClientId } from './clientId';
+import { rtdb } from './firebase-config';
 
 export type PresenceStatus = 'online' | 'offline';
 export type PresenceUser = {
@@ -10,10 +10,11 @@ export type PresenceUser = {
 };
 
 const PRESENCE_INTERVAL = 5000; // 5 seconds heartbeat
-const TTL_INTERVAL = 30000; // 30 seconds TTL
+const TTL = 30000; // 30 seconds TTL
 
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let currentPage: string = '';
+let userRef: ReturnType<typeof rtdb.ref> | null = null;
 
 // Map Arabic page keys to readable names
 const PAGE_NAMES: Record<string, string> = {
@@ -35,21 +36,26 @@ export function getPageName(pageKey: string): string {
 
 export async function updatePresence(page: string): Promise<void> {
   const clientId = getClientId();
-  if (!clientId) return;
+  if (!clientId || !rtdb) return;
 
   currentPage = page;
 
   try {
-    await supabase
-      .from('presence')
-      .upsert({
-        client_id: clientId,
-        current_page: page,
-        is_online: true,
-        last_seen: new Date().toISOString(),
-      }, {
-        onConflict: 'client_id',
-      });
+    userRef = rtdb.ref(`presence/${clientId}`);
+    await userRef.set({
+      current_page: page,
+      is_online: true,
+      last_seen: Date.now(),
+    });
+    
+    // Auto-remove after TTL
+    setTimeout(async () => {
+      const snapshot = await userRef?.once('value');
+      const data = snapshot?.val();
+      if (data && Date.now() - data.last_seen > TTL) {
+        await userRef?.remove();
+      }
+    }, TTL + 1000);
   } catch (error) {
     console.warn('Failed to update presence:', error);
   }
@@ -57,35 +63,40 @@ export async function updatePresence(page: string): Promise<void> {
 
 export async function removePresence(): Promise<void> {
   const clientId = getClientId();
-  if (!clientId) return;
+  if (!clientId || !rtdb) return;
 
   try {
-    await supabase
-      .from('presence')
-      .delete()
-      .eq('client_id', clientId);
+    await rtdb.ref(`presence/${clientId}`).remove();
   } catch (error) {
     console.warn('Failed to remove presence:', error);
   }
 }
 
 export async function fetchActivePresence(): Promise<PresenceUser[]> {
-  try {
-    const thirtySecondsAgo = new Date(Date.now() - TTL_INTERVAL).toISOString();
-    
-    const { data, error } = await supabase
-      .from('presence')
-      .select('*')
-      .eq('is_online', true)
-      .gte('last_seen', thirtySecondsAgo)
-      .order('last_seen', { ascending: false });
+  if (!rtdb) return [];
 
-    if (error) {
-      console.warn('Failed to fetch presence:', error);
-      return [];
+  try {
+    const snapshot = await rtdb.ref('presence').once('value');
+    const allPresence = snapshot.val() || {};
+    const now = Date.now();
+    
+    const users: PresenceUser[] = [];
+    
+    for (const [clientId, data] of Object.entries(allPresence)) {
+      const presence = data as any;
+      if (presence.is_online && now - presence.last_seen < TTL) {
+        users.push({
+          client_id: clientId,
+          current_page: presence.current_page,
+          is_online: presence.is_online,
+          last_seen: new Date(presence.last_seen).toISOString(),
+        });
+      }
     }
 
-    return data || [];
+    return users.sort((a, b) => 
+      new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime()
+    );
   } catch (error) {
     console.warn('Failed to fetch presence:', error);
     return [];
@@ -93,18 +104,13 @@ export async function fetchActivePresence(): Promise<PresenceUser[]> {
 }
 
 export function startPresenceTracking(page: string): void {
-  // Stop any existing tracking
   stopPresenceTracking();
-
-  // Send initial presence
   updatePresence(page);
-
-  // Start heartbeat
+  
   heartbeatInterval = setInterval(() => {
     updatePresence(currentPage);
   }, PRESENCE_INTERVAL);
 
-  // Handle page unload
   window.addEventListener('beforeunload', removePresence);
 }
 
@@ -113,10 +119,6 @@ export function stopPresenceTracking(): void {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
   }
-
-  // Remove presence
   removePresence();
-
-  // Remove event listener
   window.removeEventListener('beforeunload', removePresence);
 }
