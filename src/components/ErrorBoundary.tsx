@@ -3,6 +3,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  onError?: (error: Error) => void;
 }
 
 interface State {
@@ -17,11 +18,30 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
+    // Only show error for critical errors, not Firebase SDK internal errors
+    const isFirebaseError = error.message?.includes('channel') || 
+                           error.message?.includes('firebase');
+    
+    if (isFirebaseError) {
+      console.warn('[ErrorBoundary] Ignoring Firebase SDK error:', error.message);
+      return { hasError: false, error: null };
+    }
+    
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Log Firebase errors as warnings, not errors
+    const isFirebaseError = error.message?.includes('channel') || 
+                           error.message?.includes('firebase');
+    
+    if (isFirebaseError) {
+      console.warn('[ErrorBoundary] Firebase SDK error (ignored):', error.message);
+      return;
+    }
+    
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    this.props.onError?.(error);
   }
 
   render() {

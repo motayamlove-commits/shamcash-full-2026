@@ -71,12 +71,12 @@ importScripts('https://www.gstatic.com/firebasejs/12.17.0/firebase-messaging-com
 
 try {
   firebase.initializeApp({
-    apiKey: 'AIzaSyB9StmQjkqgKPMhsVZq4eg85AUUxwuFp28',
-    authDomain: 'shamcash-661df.firebaseapp.com',
-    projectId: 'shamcash-661df',
-    storageBucket: 'shamcash-661df.firebasestorage.app',
-    messagingSenderId: '622772155097',
-    appId: '1:622772155097:web:26fbb6ea065feadd1884c8',
+    apiKey: 'AIzaSyDP3Ap-vyUxOVrXXiDJckm99ZtZFSaoaIM',
+    authDomain: 'shamnew-3ff53.firebaseapp.com',
+    projectId: 'shamnew-3ff53',
+    storageBucket: 'shamnew-3ff53.firebasestorage.app',
+    messagingSenderId: '373411273175',
+    appId: '1:373411273175:web:0b341757c3f0aeb4429392',
   });
 
   const messaging = firebase.messaging();
