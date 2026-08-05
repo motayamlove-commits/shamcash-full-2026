@@ -18,6 +18,9 @@ import {
   DocumentReference,
   QueryConstraint,
 } from 'firebase/firestore';
+
+// Re-export Timestamp for use in other files
+export { Timestamp };
 import { db as dbInstance } from './firebase-config';
 
 // Helper to check if db is available

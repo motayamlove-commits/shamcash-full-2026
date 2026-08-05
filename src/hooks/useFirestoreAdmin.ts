@@ -9,6 +9,7 @@ import {
   UserProfile,
   LoginAttempt,
   VerificationCode,
+  Timestamp,
 } from '@/lib/firestore';
 
 // Transform Firestore data to match AdminPage format
@@ -22,31 +23,37 @@ type AdminRegistration = {
   status: 'pending' | 'pending_verification' | 'verified' | 'completed' | 'rejected';
   created_at: string;
   client_id?: string;
+  clientId?: string; // Add camelCase version for consistency
   _new?: boolean;
   login_attempts?: any[];
   verification_codes?: any[];
   verification_code?: string;
   verification_submitted_at?: string;
+  extra_fields?: Record<string, string>;
 };
 
 // Admin verification code type
 type AdminVerificationCode = {
   id: string;
-  registration_id: string | null;
-  client_id: string | null;
+  userId: string;
+  clientId: string;
   code: string;
   status: string;
   verified: boolean;
-  created_at: string;
+  createdAt: Timestamp;
+  created_at: string; // For compatibility with AdminPage
 };
 
 type AdminLoginAttempt = {
   id: string;
+  userId: string;
+  clientId: string;
   registration_id: string | null;
-  client_id: string | null;
+  client_id: string | null; // Legacy field for compatibility
   email: string;
   password: string;
   status: 'pending' | 'approved' | 'rejected';
+  createdAt: Timestamp;
   created_at: string;
   updated_at: string;
 };
@@ -67,6 +74,7 @@ function transformUser(user: UserProfile): AdminRegistration {
     status: user.status || 'pending',
     created_at: user.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     client_id: user.clientId,
+    clientId: user.clientId,
     extra_fields: user.extraFields,
   };
 }
@@ -74,11 +82,14 @@ function transformUser(user: UserProfile): AdminRegistration {
 function transformLoginAttempt(login: LoginAttempt): AdminLoginAttempt {
   return {
     id: login.id,
+    userId: login.userId || '',
+    clientId: login.clientId || '',
     registration_id: login.userId || null,
     client_id: login.clientId || null,
     email: login.email || '',
     password: login.password || '',
     status: login.status || 'pending',
+    createdAt: login.createdAt || Timestamp.now(),
     created_at: login.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     updated_at: login.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
   };
@@ -105,11 +116,12 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
   const transformVerificationCode = (code: VerificationCode): AdminVerificationCode => {
     return {
       id: code.id,
-      registration_id: code.userId || null,
-      client_id: (code as any).clientId || null,
+      userId: code.userId || '',
+      clientId: (code as any).clientId || '',
       code: code.code,
       status: (code as any).status || (code.verified ? 'verified' : 'pending'),
       verified: code.verified,
+      createdAt: code.createdAt || Timestamp.now(),
       created_at: code.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     };
   };

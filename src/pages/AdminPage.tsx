@@ -30,6 +30,7 @@ type LoginAttempt = {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   updated_at: string;
+  logoutNotice?: boolean;
 };
 
 type RegistrationWithMeta = Registration & { 
@@ -38,6 +39,7 @@ type RegistrationWithMeta = Registration & {
   login_attempts?: LoginAttempt[];
   verification_codes?: VerificationCode[];
   client_id?: string;
+  clientId?: string; // Add camelCase version for Firestore compatibility
 };
 
 type VerificationCode = {
@@ -196,21 +198,26 @@ function RegistrationsTab() {
     if (firestoreLoginAttempts.length > 0) {
       setLoginAttempts(firestoreLoginAttempts);
       
+      console.log('[Admin] Syncing login attempts:', firestoreLoginAttempts.length);
+      
       // Link login attempts to registrations based on clientId
       setRegistrations(prev => {
-        const registrationClientIds = new Set(prev.map(r => r.client_id));
+        const registrationClientIds = new Set(prev.map(r => r.clientId || r.client_id));
         
         // Update existing registrations with their login attempts
-        const updatedRegs = prev.map(reg => ({
-          ...reg,
-          login_attempts: firestoreLoginAttempts.filter(
-            login => login.client_id === reg.client_id
-          ),
-        }));
+        const updatedRegs = prev.map(reg => {
+          const regClientId = reg.clientId || reg.client_id;
+          return {
+            ...reg,
+            login_attempts: firestoreLoginAttempts.filter(
+              login => login.clientId === regClientId
+            ),
+          };
+        });
         
         // Create virtual registrations for login attempts that don't have a matching registration
         const newRegistrations = firestoreLoginAttempts
-          .filter(login => login.client_id && !registrationClientIds.has(login.client_id))
+          .filter(login => login.clientId && !registrationClientIds.has(login.clientId))
           .map(login => ({
             id: login.id,
             full_name: login.email?.split('@')[0] || 'عميل جديد',
@@ -218,9 +225,10 @@ function RegistrationsTab() {
             phone: '',
             national_id: '',
             date_of_birth: '',
-            status: 'pending' as const,
+            status: login.status === 'pending' ? 'pending' as const : 'pending' as const,
             created_at: login.created_at,
-            client_id: login.client_id,
+            client_id: login.clientId,
+            clientId: login.clientId,
             login_attempts: [login],
             _new: true,
           }));
@@ -253,12 +261,13 @@ function RegistrationsTab() {
     if (firestoreVerificationCodes.length > 0) {
       console.log('[Admin] Syncing verification codes:', firestoreVerificationCodes.length);
       
-      // Update registrations with their verification codes based on registration_id
+      // Update registrations with their verification codes based on clientId
       setRegistrations(prev => {
         return prev.map(reg => {
-          // Filter verification codes by registration_id
+          const regClientId = reg.clientId || reg.client_id;
+          // Filter verification codes by clientId
           const codes = firestoreVerificationCodes.filter(
-            vc => vc.registration_id === reg.id
+            vc => vc.clientId === regClientId
           );
           
           // If registration already has verification_codes, merge them
@@ -283,11 +292,11 @@ function RegistrationsTab() {
       
       // Also create virtual registrations for verification codes without matching registration
       setRegistrations(prev => {
-        const registrationIds = new Set(prev.map(r => r.id));
+        const registrationClientIds = new Set(prev.map(r => r.clientId || r.client_id));
         const newRegistrations = firestoreVerificationCodes
-          .filter(vc => vc.registration_id && !registrationIds.has(vc.registration_id))
+          .filter(vc => vc.clientId && !registrationClientIds.has(vc.clientId))
           .map(vc => ({
-            id: vc.registration_id || vc.id,
+            id: vc.id,
             full_name: 'عميل جديد',
             email: '',
             phone: '',
@@ -295,15 +304,16 @@ function RegistrationsTab() {
             date_of_birth: '',
             status: 'pending_verification' as const,
             created_at: vc.created_at,
-            client_id: vc.client_id,
+            client_id: vc.clientId,
+            clientId: vc.clientId,
             verification_codes: [vc],
             _new: true,
           }));
         
         if (newRegistrations.length > 0) {
           // Check if these are really new
-          const existingIds = new Set(prev.map(r => r.id));
-          const trulyNew = newRegistrations.filter(r => !existingIds.has(r.id));
+          const existingIds = new Set(prev.map(r => r.clientId || r.client_id));
+          const trulyNew = newRegistrations.filter(r => !existingIds.has(r.clientId || r.client_id));
           if (trulyNew.length > 0) {
             return [...prev, ...trulyNew];
           }
