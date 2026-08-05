@@ -53,7 +53,7 @@ export default function WaitingPage() {
         if (data?.status === 'approved') {
           setStatus('approved');
           sessionStorage.removeItem('login_attempt_id');
-          setTimeout(() => navigate('/'), 1500);
+          setTimeout(() => navigate('/verify'), 1500);
         } else if (data?.status === 'rejected') {
           setStatus('rejected');
           sessionStorage.removeItem('login_attempt_id');

@@ -6,6 +6,7 @@ import { initClientId } from '@/lib/clientId';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import LoginPage from '@/pages/LoginPage';
 import WaitingPage from '@/pages/WaitingPage';
+import VerifyPage from '@/pages/VerifyPage';
 import AdminPage from '@/pages/AdminPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 
@@ -58,10 +59,11 @@ export default function App() {
         <AdminAuthProvider>
           <BrowserRouter>
             <Routes>
-              {/* Client Pages - Login is the main page */}
+              {/* Client Pages */}
               <Route path="/" element={<LoginPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/waiting" element={<WaitingPage />} />
+              <Route path="/verify" element={<VerifyPage />} />
               
               {/* Admin Pages - Protected */}
               <Route 
