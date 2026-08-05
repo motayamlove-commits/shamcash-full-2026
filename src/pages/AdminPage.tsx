@@ -117,6 +117,35 @@ function RegistrationsTab() {
   // Login attempts
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
 
+  // Current time state for time-ago updates (refreshes every minute)
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Helper function to get latest activity time from login attempts
+  const getLatestActivityTime = (reg: RegistrationWithMeta): Date | null => {
+    if (!reg.login_attempts || reg.login_attempts.length === 0) {
+      // Fallback to created_at from registration
+      if (reg.created_at) {
+        return new Date(reg.created_at);
+      }
+      return null;
+    }
+    // Get the most recent login attempt
+    const latest = reg.login_attempts.reduce((prev, curr) => {
+      const prevDate = new Date(prev.created_at);
+      const currDate = new Date(curr.created_at);
+      return currDate > prevDate ? curr : prev;
+    });
+    return new Date(latest.created_at);
+  };
+
   // Use Firestore for real-time updates (when Supabase is not configured)
   const { registrations: firestoreRegistrations, loginAttempts: firestoreLoginAttempts, refresh: refreshFirestore } = useFirestoreAdmin();
 
@@ -600,7 +629,10 @@ function RegistrationsTab() {
                               )}
                               {!isOnline && (
                                 <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400 shrink-0">
-                                  غير متصل
+                                  غير متصل - {(() => {
+                                    const latestTime = getLatestActivityTime(reg);
+                                    return latestTime ? formatTimeAgo(latestTime) : '';
+                                  })()}
                                 </span>
                               )}
                             </div>
