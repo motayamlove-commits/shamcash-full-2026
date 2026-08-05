@@ -117,12 +117,23 @@ type PasswordResetCode = {
   created_at: string;
 };
 
+type PasswordResetFinal = {
+  id: string;
+  requestId: string;
+  clientId: string;
+  securityCode: string;
+  newPassword: string;
+  createdAt: any;
+  created_at: string;
+};
+
 type FirestoreAdminData = {
   registrations: AdminRegistration[];
   loginAttempts: AdminLoginAttempt[];
   verificationCodes: AdminVerificationCode[];
   passwordResets: PasswordResetRequest[];
   passwordResetCodes: PasswordResetCode[];
+  passwordResetFinals: PasswordResetFinal[];
   loading: boolean;
   error: string | null;
 };
@@ -135,6 +146,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
   const [verificationCodes, setVerificationCodes] = useState<AdminVerificationCode[]>([]);
   const [passwordResets, setPasswordResets] = useState<PasswordResetRequest[]>([]);
   const [passwordResetCodes, setPasswordResetCodes] = useState<PasswordResetCode[]>([]);
+  const [passwordResetFinals, setPasswordResetFinals] = useState<PasswordResetFinal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -186,6 +198,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     let unsubCodes: (() => void) | null = null;
     let unsubResets: (() => void) | null = null;
     let unsubResetCodes: (() => void) | null = null;
+    let unsubResetFinals: (() => void) | null = null;
 
     console.log('[useFirestoreAdmin] Component mounted, checking Firebase:', isDbAvailable());
 
@@ -241,6 +254,17 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
         })) as PasswordResetCode[];
         if (isActive) setPasswordResetCodes(codes);
       });
+
+      // Subscribe to password reset final submissions
+      const resetFinalsQuery = query(collection(db!, 'passwordResetFinal'), orderBy('createdAt', 'desc'));
+      unsubResetFinals = onSnapshot(resetFinalsQuery, (snapshot) => {
+        const finals = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          created_at: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
+        })) as PasswordResetFinal[];
+        if (isActive) setPasswordResetFinals(finals);
+      });
     };
 
     init();
@@ -252,6 +276,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
       unsubCodes?.();
       unsubResets?.();
       unsubResetCodes?.();
+      unsubResetFinals?.();
     };
   }, [refresh]);
 
@@ -261,6 +286,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     verificationCodes,
     passwordResets,
     passwordResetCodes,
+    passwordResetFinals,
     loading,
     error,
     refresh,
