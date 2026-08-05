@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db, isFirebaseInitialized } from '@/lib/firebase-config';
 import { initSocket, disconnectSocket } from '@/lib/socket';
+import PWABackButton from '@/components/PWABackButton';
 
 // Logo Component
 const Logo = () => (
@@ -87,8 +88,11 @@ export default function WaitingPage() {
   return (
     <div className="min-h-screen w-full bg-[#101935] flex flex-col justify-between p-5" dir="rtl">
       {/* Top Bar */}
-      <div className="w-full flex justify-between items-center text-[#8d99ae] text-sm">
-        <span>الإنكليزية</span>
+      <div className="w-full flex justify-between items-center text-[#8d99ae] text-sm px-2">
+        <div className="flex items-center gap-4">
+          <span>الإنكليزية</span>
+          <PWABackButton />
+        </div>
         <i className="fa-solid fa-headset text-lg cursor-pointer"></i>
       </div>
 

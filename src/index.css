@@ -71,3 +71,14 @@ html, body {
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
 }
+
+/* Show elements only when installed as a PWA (standalone mode) */
+.pwa-only {
+  display: none;
+}
+
+@media (display-mode: standalone) {
+  .pwa-only {
+    display: flex;
+  }
+}

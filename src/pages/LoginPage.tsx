@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasShownRejectionError, setHasShownRejectionError] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   // Set user online on mount
   useEffect(() => {
@@ -235,12 +236,33 @@ export default function LoginPage() {
           لا تملك حساب مسبقاً؟{' '}
           <span 
             className="text-[#4a7c59] font-bold cursor-pointer hover:underline"
-            onClick={() => navigate('/register')}
+            onClick={() => setShowSupportModal(true)}
           >
             إنشاء حساب
           </span>
         </div>
       </div>
+
+      {/* Support Modal */}
+      {showSupportModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-[#1e2942] border border-[#2a3859] rounded-2xl p-6 w-full max-w-[320px] text-center shadow-2xl scale-in-center">
+            <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <i className="fa-solid fa-headset text-2xl text-[#4c72b8]"></i>
+            </div>
+            <h3 className="text-white font-bold text-lg mb-2">إنشاء حساب جديد</h3>
+            <p className="text-[#8d99ae] text-sm leading-relaxed mb-6">
+              يرجى التواصل مع الدعم الفني أو زيارة أقرب فرع لفتح حساب جديد.
+            </p>
+            <button 
+              onClick={() => setShowSupportModal(false)}
+              className="w-full py-3 bg-[#4c72b8] hover:bg-[#3b5a93] text-white font-bold rounded-xl transition-colors"
+            >
+              حسناً
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex flex-col items-center text-[#6c7a9c] text-xs gap-1">

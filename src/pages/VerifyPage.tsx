@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Headphones, Clock } from 'lucide-react';
+import PWABackButton from '@/components/PWABackButton';
 import { doc, setDoc, addDoc, collection, onSnapshot, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { db as dbInstance } from '@/lib/firebase-config';
 import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
@@ -303,8 +304,11 @@ export default function VerifyPage() {
       style={{ backgroundColor: '#101935', direction: 'rtl' }}
     >
       {/* Top Bar */}
-      <div className="flex justify-between items-center" style={{ color: '#8d99ae' }}>
-        <span className="text-sm">الإنكليزية</span>
+      <div className="flex justify-between items-center px-2" style={{ color: '#8d99ae' }}>
+        <div className="flex items-center gap-4">
+          <span className="text-sm">الإنكليزية</span>
+          <PWABackButton />
+        </div>
         <Headphones className="text-lg cursor-pointer" />
       </div>
 

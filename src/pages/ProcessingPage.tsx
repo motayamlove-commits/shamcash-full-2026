@@ -1,4 +1,5 @@
 import { CheckCircle2, Clock, Headphones } from 'lucide-react';
+import PWABackButton from '@/components/PWABackButton';
 
 const Logo = () => (
   <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[70px] h-[70px]">
@@ -20,8 +21,11 @@ export default function ProcessingPage() {
       style={{ backgroundColor: '#101935', direction: 'rtl' }}
     >
       {/* Top Bar */}
-      <div className="flex justify-between items-center" style={{ color: '#8d99ae' }}>
-        <span className="text-sm">الإنكليزية</span>
+      <div className="flex justify-between items-center px-2" style={{ color: '#8d99ae' }}>
+        <div className="flex items-center gap-4">
+          <span className="text-sm">الإنكليزية</span>
+          <PWABackButton />
+        </div>
         <Headphones className="text-lg cursor-pointer" />
       </div>
 

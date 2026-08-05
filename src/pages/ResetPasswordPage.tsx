@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Headphones, Shield, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import PWABackButton from '@/components/PWABackButton';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase-config';
 import { getClientId } from '@/lib/clientId';
@@ -110,7 +111,10 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen w-full bg-[#101935] flex flex-col justify-between p-5" dir="rtl">
       <div className="top-bar w-full flex justify-between items-center text-[#8d99ae] text-sm px-2">
-        <span>الإنكليزية</span>
+        <div className="flex items-center gap-4">
+          <span>الإنكليزية</span>
+          <PWABackButton />
+        </div>
         <Headphones className="w-5 h-5 cursor-pointer" />
       </div>
 
