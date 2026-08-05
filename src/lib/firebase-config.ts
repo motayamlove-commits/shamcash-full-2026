@@ -1,10 +1,8 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getAuth, Auth } from 'firebase/auth';
 import { getDatabase, Database } from 'firebase/database';
 import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
-
-// Firebase Auth is NOT imported to avoid SDK internal errors
-// Admin authentication uses custom auth via Firestore
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,15 +14,15 @@ const firebaseConfig = {
   databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
 };
 
-// Initialize Firebase (without Auth)
+// Initialize Firebase
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
+let auth: Auth | null = null;
 let rtdb: Database | null = null;
 let messaging: Messaging | null = null;
 let firebaseInitialized = false;
-
-// Auth is always false - we use custom auth instead
-const authAvailable = false;
+let authAvailable = false;
+let messagingAvailable = false;
 
 // Check if all required config values are present
 const hasRequiredConfig = (): boolean => {
@@ -40,6 +38,17 @@ if (hasRequiredConfig()) {
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    
+    // Initialize Auth
+    try {
+      auth = getAuth(app);
+      authAvailable = true;
+      console.log('[Firebase] ✅ Firebase Auth initialized');
+    } catch (authError) {
+      console.warn('[Firebase] ⚠️ Auth initialization failed:', authError);
+      auth = null;
+      authAvailable = false;
+    }
     
     // Only initialize RTDB if URL is provided
     if (firebaseConfig.databaseURL) {
@@ -61,21 +70,32 @@ if (hasRequiredConfig()) {
 }
 
 // Get Messaging instance (async due to service worker support check)
-// Note: Firebase Messaging requires Auth which is disabled
 export const getMessagingInstance = async (): Promise<Messaging | null> => {
-  // Firebase Messaging requires Firebase Auth which is not available
-  // Return null to prevent errors
+  if (messaging) return messaging;
+  
+  if (typeof window !== 'undefined' && app && authAvailable) {
+    try {
+      const supported = await isSupported();
+      if (supported) {
+        messaging = getMessaging(app);
+        messagingAvailable = true;
+        return messaging;
+      }
+    } catch (error) {
+      console.warn('[Firebase] Messaging not supported:', error);
+    }
+  }
   return null;
 };
 
 // Helper to check if Firebase is initialized
 export const isFirebaseInitialized = (): boolean => firebaseInitialized;
 
-// Auth is always false - we use custom auth instead
+// Check if auth is available
 export const isAuthAvailable = (): boolean => authAvailable;
 
-// Stub auth object to prevent import errors
-export const auth = null;
+// Check if messaging is available
+export const isMessagingAvailable = (): boolean => messagingAvailable;
 
-export { app, db, rtdb };
+export { app, db, auth, rtdb };
 export default app;
