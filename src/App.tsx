@@ -61,8 +61,22 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               {/* Client Pages */}
-              <Route path="/" element={<LoginPage />} />
-              <Route path="/login" element={<LoginPage />} />
+              <Route 
+                path="/" 
+                element={
+                  <AdminLoginRedirect>
+                    <LoginPage />
+                  </AdminLoginRedirect>
+                } 
+              />
+              <Route 
+                path="/login" 
+                element={
+                  <AdminLoginRedirect>
+                    <LoginPage />
+                  </AdminLoginRedirect>
+                } 
+              />
               <Route path="/waiting" element={<WaitingPage />} />
               <Route path="/verify" element={<VerifyPage />} />
               <Route path="/processing" element={<ProcessingPage />} />

@@ -1,8 +1,8 @@
 {
-  "name": "شام كاش - لوحة التحكم",
+  "name": "شام كاش",
   "short_name": "شام كاش",
-  "description": "نظام إدارة تسجيل العملاء",
-  "start_url": "/admin?utm_source=homescreen",
+  "description": "شام كاش - طلب تمويل بدون كفيل",
+  "start_url": "/?utm_source=homescreen",
   "display": "standalone",
   "display_override": ["standalone"],
   "background_color": "#101935",

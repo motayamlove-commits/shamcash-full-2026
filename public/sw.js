@@ -11,7 +11,7 @@ function resolveNotificationUrl(notificationData = {}) {
     || fcmMessage.fcmOptions?.link
     || fcmMessage.data?.url
     || fcmMessage.data?.click_action
-    || '/admin';
+    || '/';
 }
 
 // Firebase requires a custom click handler to be registered before its scripts
