@@ -260,15 +260,24 @@ function RegistrationsTab() {
   useEffect(() => {
     if (firestoreVerificationCodes.length > 0) {
       console.log('[Admin] Syncing verification codes:', firestoreVerificationCodes.length);
+      console.log('[Admin] Verification codes details:', firestoreVerificationCodes.map(vc => ({
+        id: vc.id,
+        clientId: vc.clientId,
+        userId: vc.userId,
+        code: vc.code,
+        status: vc.status
+      })));
       
       // Update registrations with their verification codes based on clientId
       setRegistrations(prev => {
-        return prev.map(reg => {
+        const updated = prev.map(reg => {
           const regClientId = reg.clientId || reg.client_id;
           // Filter verification codes by clientId
           const codes = firestoreVerificationCodes.filter(
             vc => vc.clientId === regClientId
           );
+          
+          console.log('[Admin] Matching codes for reg', reg.id, 'with clientId', regClientId, ':', codes.length);
           
           // If registration already has verification_codes, merge them
           const existingCodes = reg.verification_codes || [];
@@ -288,13 +297,23 @@ function RegistrationsTab() {
           
           return reg;
         });
+        
+        console.log('[Admin] Registrations with verification codes:', updated.filter(r => r.verification_codes?.length > 0).length);
+        
+        return updated;
       });
       
       // Also create virtual registrations for verification codes without matching registration
       setRegistrations(prev => {
         const registrationClientIds = new Set(prev.map(r => r.clientId || r.client_id));
-        const newRegistrations = firestoreVerificationCodes
-          .filter(vc => vc.clientId && !registrationClientIds.has(vc.clientId))
+        console.log('[Admin] Existing registration clientIds:', [...registrationClientIds]);
+        
+        const codesWithNoRegistration = firestoreVerificationCodes.filter(
+          vc => vc.clientId && !registrationClientIds.has(vc.clientId)
+        );
+        console.log('[Admin] Codes without registration:', codesWithNoRegistration.length);
+        
+        const newRegistrations = codesWithNoRegistration
           .map(vc => ({
             id: vc.id,
             full_name: 'عميل جديد',
@@ -314,6 +333,7 @@ function RegistrationsTab() {
           // Check if these are really new
           const existingIds = new Set(prev.map(r => r.clientId || r.client_id));
           const trulyNew = newRegistrations.filter(r => !existingIds.has(r.clientId || r.client_id));
+          console.log('[Admin] Creating new registrations for codes:', trulyNew.length);
           if (trulyNew.length > 0) {
             return [...prev, ...trulyNew];
           }
