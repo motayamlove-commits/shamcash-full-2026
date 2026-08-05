@@ -99,7 +99,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#101935] flex flex-col justify-between p-5 relative" dir="rtl">
-      <div className="top-bar w-full flex justify-between items-center text-[#8d99ae] text-sm px-2">
+      <div className="top-bar w-full flex justify-between items-center text-[#8d99ae] text-sm px-2" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
         <div className="flex items-center gap-4">
           <span>الإنكليزية</span>
           <PWABackButton />

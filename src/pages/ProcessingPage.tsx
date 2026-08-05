@@ -24,7 +24,7 @@ export default function ProcessingPage() {
       style={{ backgroundColor: '#101935', direction: 'rtl' }}
     >
       {/* Top Bar */}
-      <div className="flex justify-between items-center px-2" style={{ color: '#8d99ae' }}>
+      <div className="flex justify-between items-center px-2" style={{ color: '#8d99ae', paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
         <div className="flex items-center gap-4">
           <span className="text-sm">الإنكليزية</span>
           <PWABackButton />
