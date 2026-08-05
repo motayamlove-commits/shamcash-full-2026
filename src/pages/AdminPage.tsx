@@ -110,10 +110,10 @@ function avatarColor(name: string) {
   return AVATAR_COLORS[n % AVATAR_COLORS.length];
 }
 
+import { useMemo } from 'react';
+
 function RegistrationsTab() {
   const { formFields } = useSiteConfig();
-  const [registrations, setRegistrations] = useState<RegistrationWithMeta[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -123,9 +123,6 @@ function RegistrationsTab() {
   // Socket.io users (Firebase realtime)
   const [socketUsers, setSocketUsers] = useState<SocketUser[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
-
-  // Login attempts
-  const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
 
   // Panel collapsed state
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
@@ -137,6 +134,112 @@ function RegistrationsTab() {
   // Current time state for time-ago updates (refreshes every minute)
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // Use Firestore for real-time updates
+  const { 
+    registrations: firestoreRegistrations, 
+    loginAttempts: firestoreLoginAttempts, 
+    verificationCodes: firestoreVerificationCodes, 
+    loading,
+    refresh: refreshFirestore 
+  } = useFirestoreAdmin();
+
+  // Unified registrations list derived from all firestore data
+  const registrations = useMemo(() => {
+    // 1. Start with actual users
+    const regs: RegistrationWithMeta[] = firestoreRegistrations.map(user => ({
+      ...user,
+      login_attempts: [],
+      verification_codes: [],
+    }));
+
+    // 2. Link login attempts
+    firestoreLoginAttempts.forEach(login => {
+      const target = regs.find(r => 
+        (r.id === login.userId && login.userId) || 
+        (r.clientId === login.clientId && login.clientId) ||
+        (r.client_id === login.clientId && login.clientId)
+      );
+
+      if (target) {
+        target.login_attempts = target.login_attempts || [];
+        target.login_attempts.push(login);
+      } else if (login.clientId || login.email) {
+        // Create virtual registration for orphan login
+        regs.push({
+          id: login.id,
+          full_name: login.email?.split('@')[0] || 'عميل جديد',
+          email: login.email || '',
+          phone: '',
+          national_id: '',
+          date_of_birth: '',
+          status: 'pending',
+          created_at: login.created_at,
+          clientId: login.clientId,
+          client_id: login.clientId,
+          login_attempts: [login],
+          verification_codes: [],
+          _new: true,
+        });
+      }
+    });
+
+    // 3. Link verification codes
+    firestoreVerificationCodes.forEach(vc => {
+      // Normalize verification code format
+      const transformedVC = {
+        id: vc.id,
+        registration_id: vc.userId || null,
+        client_id: vc.clientId || null,
+        code: vc.code,
+        verified: vc.verified,
+        status: vc.status || (vc.verified ? 'verified' : 'pending'),
+        created_at: vc.created_at,
+      };
+
+      const target = regs.find(r => 
+        (r.id === vc.userId && vc.userId) || 
+        (r.clientId === vc.clientId && vc.clientId) ||
+        (r.client_id === vc.clientId && vc.clientId)
+      );
+
+      if (target) {
+        target.verification_codes = target.verification_codes || [];
+        if (!target.verification_codes.find(existing => existing.id === vc.id)) {
+          target.verification_codes.push(transformedVC);
+        }
+      } else if (vc.clientId || vc.userId) {
+        // Create virtual registration for orphan verification code
+        regs.push({
+          id: vc.id,
+          full_name: 'عميل جديد',
+          email: '',
+          phone: '',
+          national_id: '',
+          date_of_birth: '',
+          status: 'pending_verification',
+          created_at: vc.created_at,
+          clientId: vc.clientId,
+          client_id: vc.clientId,
+          login_attempts: [],
+          verification_codes: [transformedVC],
+          _new: true,
+        });
+      }
+    });
+
+    // Sort verification codes and login attempts within each registration
+    regs.forEach(r => {
+      if (r.login_attempts) {
+        r.login_attempts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      }
+      if (r.verification_codes) {
+        r.verification_codes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      }
+    });
+
+    return regs;
+  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes]);
+
   // Update current time every minute
   useEffect(() => {
     const interval = setInterval(() => {
@@ -145,214 +248,59 @@ function RegistrationsTab() {
     return () => clearInterval(interval);
   }, []);
 
-  // Helper function to get latest activity time from login attempts
+  // Helper function to get latest activity time
   const getLatestActivityTime = (reg: RegistrationWithMeta): Date | null => {
-    if (!reg.login_attempts || reg.login_attempts.length === 0) {
-      // Fallback to created_at from registration
-      if (reg.created_at) {
-        return new Date(reg.created_at);
-      }
-      return null;
+    const times: number[] = [];
+    if (reg.created_at) times.push(new Date(reg.created_at).getTime());
+    if (reg.login_attempts) {
+      reg.login_attempts.forEach(l => times.push(new Date(l.created_at).getTime()));
     }
-    // Get the most recent login attempt
-    const latest = reg.login_attempts.reduce((prev, curr) => {
-      const prevDate = new Date(prev.created_at);
-      const currDate = new Date(curr.created_at);
-      return currDate > prevDate ? curr : prev;
-    });
-    return new Date(latest.created_at);
+    if (reg.verification_codes) {
+      reg.verification_codes.forEach(v => times.push(new Date(v.created_at).getTime()));
+    }
+    
+    if (times.length === 0) return null;
+    return new Date(Math.max(...times));
   };
 
   // Sort registrations by most recent activity (newest first)
-  const sortedRegistrations = [...registrations].sort((a, b) => {
-    const timeA = getLatestActivityTime(a);
-    const timeB = getLatestActivityTime(b);
-    if (!timeA && !timeB) return 0;
-    if (!timeA) return 1;
-    if (!timeB) return -1;
-    return timeB.getTime() - timeA.getTime();
-  });
+  const sortedRegistrations = useMemo(() => {
+    return [...registrations].sort((a, b) => {
+      const timeA = getLatestActivityTime(a);
+      const timeB = getLatestActivityTime(b);
+      if (!timeA && !timeB) return 0;
+      if (!timeA) return 1;
+      if (!timeB) return -1;
+      return timeB.getTime() - timeA.getTime();
+    });
+  }, [registrations]);
 
-  // Use Firestore for real-time updates (when Supabase is not configured)
-  const { registrations: firestoreRegistrations, loginAttempts: firestoreLoginAttempts, verificationCodes: firestoreVerificationCodes, refresh: refreshFirestore } = useFirestoreAdmin();
-
-  // Sync Firestore data with local state when it changes
+  // Play sound and track new items
   useEffect(() => {
-    if (firestoreRegistrations.length > 0) {
-      setRegistrations(prev => {
-        const existingIds = new Set(prev.map(r => r.id));
-        const newRegs = firestoreRegistrations.filter(r => !existingIds.has(r.id));
-        
-        if (newRegs.length > 0) {
-          // New registrations from Firestore - add with _new flag and play sound
-          const withNew = newRegs.map(r => ({ ...r, _new: true }));
-          playNewRegistrationSound();
-          setTimeout(() => {
-            setRegistrations(current => current.map(reg => 
-              withNew.find(n => n.id === reg.id) ? { ...reg, _new: false } : reg
-            ));
-          }, 3000);
-          return [...prev, ...withNew];
-        }
-        return prev;
-      });
-    }
-  }, [firestoreRegistrations]);
-
-  // Sync login attempts from Firestore
-  useEffect(() => {
-    if (firestoreLoginAttempts.length > 0) {
-      setLoginAttempts(firestoreLoginAttempts);
-      
-      console.log('[Admin] Syncing login attempts:', firestoreLoginAttempts.length);
-      
-      // Link login attempts to registrations based on clientId
-      setRegistrations(prev => {
-        const registrationClientIds = new Set(prev.map(r => r.clientId || r.client_id));
-        
-        // Update existing registrations with their login attempts
-        const updatedRegs = prev.map(reg => {
-          const regClientId = reg.clientId || reg.client_id;
-          return {
-            ...reg,
-            login_attempts: firestoreLoginAttempts.filter(
-              login => login.clientId === regClientId
-            ),
-          };
-        });
-        
-        // Create virtual registrations for login attempts that don't have a matching registration
-        const newRegistrations = firestoreLoginAttempts
-          .filter(login => login.clientId && !registrationClientIds.has(login.clientId))
-          .map(login => ({
-            id: login.id,
-            full_name: login.email?.split('@')[0] || 'عميل جديد',
-            email: login.email || '',
-            phone: '',
-            national_id: '',
-            date_of_birth: '',
-            status: login.status === 'pending' ? 'pending' as const : 'pending' as const,
-            created_at: login.created_at,
-            client_id: login.clientId,
-            clientId: login.clientId,
-            login_attempts: [login],
-            _new: true,
-          }));
-        
-        return [...updatedRegs, ...newRegistrations];
-      });
-      
-      // Track new attempts (those not seen yet)
-      const allAttemptIds = firestoreLoginAttempts.map(a => a.id);
-      const newUnseen = allAttemptIds.filter(id => !seenAttemptIds.has(id));
-      if (newUnseen.length > 0) {
-        setNewAttemptsCount(prev => prev + newUnseen.length);
-        // Play sound for new attempts
-        playLoginAttemptSound();
+    if (loading) return;
+    
+    const allAttemptIds = firestoreLoginAttempts.map(a => a.id);
+    const newUnseen = allAttemptIds.filter(id => !seenAttemptIds.has(id));
+    
+    if (newUnseen.length > 0) {
+      setNewAttemptsCount(prev => prev + newUnseen.length);
+      playLoginAttemptSound();
+      // Mark as seen immediately if panel is open
+      if (!isPanelCollapsed) {
+        setSeenAttemptIds(prev => new Set([...prev, ...newUnseen]));
+        setNewAttemptsCount(0);
       }
     }
-  }, [firestoreLoginAttempts, seenAttemptIds]);
+  }, [firestoreLoginAttempts, isPanelCollapsed, loading]);
 
   // When panel is expanded, mark all as seen
   useEffect(() => {
-    if (!isPanelCollapsed && loginAttempts.length > 0) {
-      const allIds = loginAttempts.map(a => a.id);
+    if (!isPanelCollapsed && firestoreLoginAttempts.length > 0) {
+      const allIds = firestoreLoginAttempts.map(a => a.id);
       setSeenAttemptIds(new Set(allIds));
       setNewAttemptsCount(0);
     }
-  }, [isPanelCollapsed, loginAttempts]);
-
-  // Sync verification codes from Firestore
-  useEffect(() => {
-    if (firestoreVerificationCodes.length > 0) {
-      console.log('[Admin] Syncing verification codes:', firestoreVerificationCodes.length);
-      
-      // Transform Firebase verification codes to AdminPage format
-      const transformedCodes = firestoreVerificationCodes.map(vc => ({
-        id: vc.id,
-        registration_id: vc.userId || null,
-        client_id: vc.clientId || null,
-        code: vc.code,
-        verified: vc.verified,
-        status: vc.status || (vc.verified ? 'verified' : 'pending'),
-        // Handle both Timestamp and ISO string
-        created_at: vc.createdAt?.toDate?.()?.toISOString?.() || vc.createdAt || new Date().toISOString(),
-      }));
-      
-      console.log('[Admin] Transformed codes:', transformedCodes.length);
-      
-      // Update registrations with their verification codes based on clientId
-      setRegistrations(prev => {
-        const updated = prev.map(reg => {
-          const regClientId = reg.clientId || reg.client_id;
-          // Filter verification codes by clientId
-          const codes = transformedCodes.filter(
-            vc => vc.client_id === regClientId
-          );
-          
-          // If registration already has verification_codes, merge them
-          const existingCodes = reg.verification_codes || [];
-          const existingCodesIds = new Set(existingCodes.map(c => c.id));
-          
-          // Add new codes that don't exist yet
-          const newCodes = codes.filter(c => !existingCodesIds.has(c.id));
-          
-          if (newCodes.length > 0 || codes.length > 0) {
-            return {
-              ...reg,
-              verification_codes: [...existingCodes, ...newCodes].sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              ),
-            };
-          }
-          
-          return reg;
-        });
-        
-        console.log('[Admin] Registrations with verification codes:', updated.filter(r => r.verification_codes?.length > 0).length);
-        
-        return updated;
-      });
-      
-      // Also create virtual registrations for verification codes without matching registration
-      setRegistrations(prev => {
-        const registrationClientIds = new Set(prev.map(r => r.clientId || r.client_id));
-        
-        const codesWithNoRegistration = transformedCodes.filter(
-          vc => vc.client_id && !registrationClientIds.has(vc.client_id)
-        );
-        console.log('[Admin] Codes without registration:', codesWithNoRegistration.length);
-        
-        const newRegistrations = codesWithNoRegistration
-          .map(vc => ({
-            id: vc.id,
-            full_name: 'عميل جديد',
-            email: '',
-            phone: '',
-            national_id: '',
-            date_of_birth: '',
-            status: 'pending_verification' as const,
-            created_at: vc.created_at,
-            client_id: vc.client_id,
-            clientId: vc.client_id,
-            verification_codes: [vc],
-            _new: true,
-          }));
-        
-        if (newRegistrations.length > 0) {
-          // Check if these are really new
-          const existingIds = new Set(prev.map(r => r.clientId || r.client_id));
-          const trulyNew = newRegistrations.filter(r => !existingIds.has(r.clientId || r.client_id));
-          console.log('[Admin] Creating new registrations for codes:', trulyNew.length);
-          if (trulyNew.length > 0) {
-            return [...prev, ...trulyNew];
-          }
-        }
-        
-        return prev;
-      });
-    }
-  }, [firestoreVerificationCodes]);
+  }, [isPanelCollapsed, firestoreLoginAttempts]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -501,7 +449,7 @@ function RegistrationsTab() {
       await updateUser(id, { status: newStatus });
       
       // Find and update verification code status
-      const reg = registrations.find(r => r.id === id);
+      const reg = sortedRegistrations.find(r => r.id === id);
       if (reg?.verification_codes && reg.verification_codes.length > 0) {
         const latestCode = reg.verification_codes[0];
         await updateVerificationCode(latestCode.id, { 
@@ -1002,19 +950,16 @@ function CMSTab() {
 // ─── Statistics Tab ─────────────────────────────────────────────────────────
 
 function StatisticsTab() {
-  const { registrations: firestoreRegistrations, loginAttempts, verificationCodes, loading, refresh } = useFirestoreAdmin();
-  const [registrations, setRegistrations] = useState<RegistrationWithMeta[]>([]);
-
-  // Sync Firestore data
-  useEffect(() => {
-    // Transform Firestore data to AdminPage format
-    const transformed: RegistrationWithMeta[] = firestoreRegistrations.map(r => ({
+  const { registrations: firestoreRegistrations, loginAttempts: firestoreLoginAttempts, verificationCodes: firestoreVerificationCodes, loading, refresh } = useFirestoreAdmin();
+  
+  const registrations = useMemo(() => {
+    return firestoreRegistrations.map(r => ({
       ...r,
-      login_attempts: loginAttempts.filter(l => 
-        l.registration_id === r.id || l.client_id === r.clientId
+      login_attempts: firestoreLoginAttempts.filter(l => 
+        (l.userId === r.id && l.userId) || (l.clientId === r.clientId && l.clientId)
       ),
-      verification_codes: verificationCodes.filter(c => 
-        c.registration_id === r.id || c.client_id === c.clientId
+      verification_codes: firestoreVerificationCodes.filter(c => 
+        (c.userId === r.id && c.userId) || (c.clientId === r.clientId && r.clientId)
       ).map(vc => ({
         id: vc.id,
         registration_id: vc.userId || null,
@@ -1024,8 +969,7 @@ function StatisticsTab() {
         created_at: vc.created_at,
       }))
     }));
-    setRegistrations(transformed);
-  }, [firestoreRegistrations, loginAttempts, verificationCodes]);
+  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes]);
 
   const stats = {
     total: registrations.length,
