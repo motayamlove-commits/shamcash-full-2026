@@ -301,6 +301,16 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', firebase: firebaseInitialized, timestamp: new Date().toISOString() });
 });
 
+// Root route for health checks
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'Socket.io Server',
+    firebase: firebaseInitialized,
+    timestamp: new Date().toISOString() 
+  });
+});
+
 app.get('/api/online-users', (req, res) => {
   const users = Array.from(onlineUsers.values());
   res.json({ total: users.length, users });
