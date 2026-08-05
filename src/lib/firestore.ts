@@ -144,6 +144,9 @@ export const subscribeToUsers = (callback: (users: UserProfile[]) => void): (() 
 // ═══════════════════════════════════════════════════════════
 
 export const createLoginAttempt = async (data: Omit<LoginAttempt, 'id' | 'createdAt'>): Promise<string> => {
+  if (!isDbAvailable()) {
+    throw new Error('Firestore not available');
+  }
   const docRef = await addDoc(collection(db, LOGIN_ATTEMPTS_COLLECTION), {
     ...data,
     createdAt: Timestamp.now(),
@@ -170,6 +173,9 @@ export const getLoginAttemptsByUser = async (userId: string): Promise<LoginAttem
 };
 
 export const getAllLoginAttempts = async (): Promise<LoginAttempt[]> => {
+  if (!isDbAvailable()) {
+    return [];
+  }
   const q = query(collection(db, LOGIN_ATTEMPTS_COLLECTION), orderBy('createdAt', 'desc'));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoginAttempt));
@@ -177,6 +183,10 @@ export const getAllLoginAttempts = async (): Promise<LoginAttempt[]> => {
 
 // Subscribe to login attempts (realtime)
 export const subscribeToLoginAttempts = (callback: (attempts: LoginAttempt[]) => void): (() => void) => {
+  if (!isDbAvailable()) {
+    callback([]);
+    return () => {};
+  }
   const q = query(collection(db, LOGIN_ATTEMPTS_COLLECTION), orderBy('createdAt', 'desc'));
   
   return onSnapshot(q, (querySnapshot) => {

