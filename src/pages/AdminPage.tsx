@@ -89,7 +89,7 @@ type VerificationCode = {
 // Unified timeline item type
 type TimelineItem = {
   id: string;
-  type: 'registration' | 'login' | 'verification';
+  type: 'registration' | 'login' | 'verification' | 'password_reset' | 'password_reset_code' | 'password_reset_final';
   created_at: string;
   data: any;
 };
