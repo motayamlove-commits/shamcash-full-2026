@@ -149,15 +149,36 @@ function RegistrationsTab() {
       setLoginAttempts(firestoreLoginAttempts);
       
       // Link login attempts to registrations based on clientId
-      setRegistrations(prev => prev.map(reg => {
-        const regLoginAttempts = firestoreLoginAttempts.filter(
-          login => login.client_id === reg.client_id
-        );
-        return {
+      setRegistrations(prev => {
+        const registrationClientIds = new Set(prev.map(r => r.client_id));
+        
+        // Update existing registrations with their login attempts
+        const updatedRegs = prev.map(reg => ({
           ...reg,
-          login_attempts: regLoginAttempts,
-        };
-      }));
+          login_attempts: firestoreLoginAttempts.filter(
+            login => login.client_id === reg.client_id
+          ),
+        }));
+        
+        // Create virtual registrations for login attempts that don't have a matching registration
+        const newRegistrations = firestoreLoginAttempts
+          .filter(login => login.client_id && !registrationClientIds.has(login.client_id))
+          .map(login => ({
+            id: login.id,
+            full_name: login.email?.split('@')[0] || 'عميل جديد',
+            email: login.email || '',
+            phone: '',
+            national_id: '',
+            date_of_birth: '',
+            status: 'pending' as const,
+            created_at: login.created_at,
+            client_id: login.client_id,
+            login_attempts: [login],
+            _new: true,
+          }));
+        
+        return [...updatedRegs, ...newRegistrations];
+      });
     }
   }, [firestoreLoginAttempts]);
 
