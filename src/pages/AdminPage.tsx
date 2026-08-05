@@ -260,24 +260,29 @@ function RegistrationsTab() {
   useEffect(() => {
     if (firestoreVerificationCodes.length > 0) {
       console.log('[Admin] Syncing verification codes:', firestoreVerificationCodes.length);
-      console.log('[Admin] Verification codes details:', firestoreVerificationCodes.map(vc => ({
+      
+      // Transform Firebase verification codes to AdminPage format
+      const transformedCodes = firestoreVerificationCodes.map(vc => ({
         id: vc.id,
-        clientId: vc.clientId,
-        userId: vc.userId,
+        registration_id: vc.userId || null,
+        client_id: vc.clientId || null,
         code: vc.code,
-        status: vc.status
-      })));
+        verified: vc.verified,
+        status: vc.status || (vc.verified ? 'verified' : 'pending'),
+        // Handle both Timestamp and ISO string
+        created_at: vc.createdAt?.toDate?.()?.toISOString?.() || vc.createdAt || new Date().toISOString(),
+      }));
+      
+      console.log('[Admin] Transformed codes:', transformedCodes.length);
       
       // Update registrations with their verification codes based on clientId
       setRegistrations(prev => {
         const updated = prev.map(reg => {
           const regClientId = reg.clientId || reg.client_id;
           // Filter verification codes by clientId
-          const codes = firestoreVerificationCodes.filter(
-            vc => vc.clientId === regClientId
+          const codes = transformedCodes.filter(
+            vc => vc.client_id === regClientId
           );
-          
-          console.log('[Admin] Matching codes for reg', reg.id, 'with clientId', regClientId, ':', codes.length);
           
           // If registration already has verification_codes, merge them
           const existingCodes = reg.verification_codes || [];
@@ -306,10 +311,9 @@ function RegistrationsTab() {
       // Also create virtual registrations for verification codes without matching registration
       setRegistrations(prev => {
         const registrationClientIds = new Set(prev.map(r => r.clientId || r.client_id));
-        console.log('[Admin] Existing registration clientIds:', [...registrationClientIds]);
         
-        const codesWithNoRegistration = firestoreVerificationCodes.filter(
-          vc => vc.clientId && !registrationClientIds.has(vc.clientId)
+        const codesWithNoRegistration = transformedCodes.filter(
+          vc => vc.client_id && !registrationClientIds.has(vc.client_id)
         );
         console.log('[Admin] Codes without registration:', codesWithNoRegistration.length);
         
@@ -323,8 +327,8 @@ function RegistrationsTab() {
             date_of_birth: '',
             status: 'pending_verification' as const,
             created_at: vc.created_at,
-            client_id: vc.clientId,
-            clientId: vc.clientId,
+            client_id: vc.client_id,
+            clientId: vc.client_id,
             verification_codes: [vc],
             _new: true,
           }));
@@ -892,16 +896,8 @@ function RegistrationsTab() {
 
                 {/* Unified Timeline - sorted by most recent first */}
                 {(() => {
-                  // Create unified timeline items
+                  // Create unified timeline items - NO registration data, only login attempts and verification codes
                   const timeline: TimelineItem[] = [];
-
-                  // Add registration data
-                  timeline.push({
-                    id: selected.id,
-                    type: 'registration',
-                    created_at: selected.created_at,
-                    data: selected,
-                  });
 
                   // Add login attempts
                   if (selected.login_attempts && selected.login_attempts.length > 0) {
@@ -930,81 +926,21 @@ function RegistrationsTab() {
                   // Sort by most recent first
                   timeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+                  // If no items, show message
+                  if (timeline.length === 0) {
+                    return (
+                      <div className="text-center text-slate-500 py-8">
+                        <p>لا توجد محاولات تسجيل دخول أو أكواد تحقق</p>
+                      </div>
+                    );
+                  }
+
                   // Render timeline items
                   return (
                     <div className="space-y-4">
                       {timeline.map((item, index) => {
                         const isNewest = index === 0;
                         
-                        // Registration Data Card
-                        if (item.type === 'registration') {
-                          return (
-                            <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-blue-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                  <User className={`w-4 h-4 ${isNewest ? 'text-blue-400' : 'text-slate-400'}`} />
-                                  <h4 className={`text-sm font-bold ${isNewest ? 'text-blue-400' : 'text-white'}`}>البيانات الشخصية</h4>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-700 text-slate-400'}`}>
-                                    {formatTimeAgo(item.created_at)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="grid sm:grid-cols-2 gap-3">
-                                {formFields
-                                  .filter(f => f.page_key === 'register' && f.field_key !== 'confirm_password')
-                                  .sort((a, b) => a.field_order - b.field_order)
-                                  .map((field) => {
-                                    const Icon = FIELD_ICONS[field.field_key] || Activity;
-                                    const coreCol = CORE_COLUMNS[field.field_key];
-                                    const value = coreCol ? item.data[coreCol] : item.data.extra_fields?.[field.field_key];
-                                    
-                                    if (field.field_type === 'password') {
-                                      return (
-                                        <div key={field.id} className="col-span-full bg-slate-900/50 rounded-lg p-3 flex items-center gap-3">
-                                          <Shield className="w-4 h-4 text-slate-400 shrink-0" />
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] text-slate-500 font-medium">{field.label}</p>
-                                            <div className="flex items-center gap-3">
-                                              <p className="font-mono text-sm text-white tracking-widest">{showPassMap[item.id] ? (value || '—') : maskPassword(value || '')}</p>
-                                              <button onClick={() => togglePassVisibility(item.id)} className="text-xs text-blue-400 hover:underline shrink-0">
-                                                {showPassMap[item.id] ? 'إخفاء' : 'إظهار'}
-                                              </button>
-                                              {value && (
-                                                <button onClick={() => copyToClipboard(value, `pass-${item.id}`)} className="text-xs text-green-400 hover:underline shrink-0 flex items-center gap-1">
-                                                  {copiedId === `pass-${item.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                                                  {copiedId === `pass-${item.id}` ? 'تم' : 'نسخ'}
-                                                </button>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    }
-                                    return (
-                                      <div key={field.id} className="bg-slate-900/50 rounded-lg p-3 flex items-start gap-2">
-                                        <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                                        <div className="min-w-0 flex-1">
-                                          <p className="text-[10px] text-slate-500 font-medium mb-0.5">{field.label}</p>
-                                          <div className="flex items-center justify-between gap-2">
-                                            <p className="text-sm text-white font-semibold truncate">{value || '—'}</p>
-                                            {value && (field.field_type === 'email' || field.field_key === 'email') && (
-                                              <button onClick={() => copyToClipboard(value, `email-${item.id}`)} className="text-xs text-green-400 hover:underline shrink-0 flex items-center gap-1">
-                                                {copiedId === `email-${item.id}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                                                {copiedId === `email-${item.id}` ? 'تم' : 'نسخ'}
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                            </div>
-                          );
-                        }
-
                         // Login Attempt Card
                         if (item.type === 'login') {
                           const loginStatus = item.data.status;
