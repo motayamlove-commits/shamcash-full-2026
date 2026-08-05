@@ -34,6 +34,8 @@ const getAllPresenceRef = () => ref(rtdb, PRESENCE_PATH);
  * Set user as online with page info
  */
 export const setUserOnline = async (clientId: string, page: string, userId?: string, name?: string): Promise<void> => {
+  if (!rtdb) return;
+  
   const presenceRef = getPresenceRef(clientId);
   
   const userData: OnlineUser = {
@@ -41,9 +43,11 @@ export const setUserOnline = async (clientId: string, page: string, userId?: str
     page,
     online: true,
     lastSeen: Date.now(),
-    userId,
-    name,
   };
+  
+  // Only add userId and name if they are defined
+  if (userId) userData.userId = userId;
+  if (name) userData.name = name;
   
   await set(presenceRef, userData);
   
@@ -56,6 +60,8 @@ export const setUserOnline = async (clientId: string, page: string, userId?: str
  * Update user's current page
  */
 export const updateUserPage = async (clientId: string, page: string): Promise<void> => {
+  if (!rtdb) return;
+  
   const presenceRef = getPresenceRef(clientId);
   
   await update(presenceRef, {
@@ -69,6 +75,8 @@ export const updateUserPage = async (clientId: string, page: string): Promise<vo
  * Set user as offline
  */
 export const setUserOffline = async (clientId: string): Promise<void> => {
+  if (!rtdb) return;
+  
   const presenceRef = getPresenceRef(clientId);
   await remove(presenceRef);
 };
@@ -77,6 +85,8 @@ export const setUserOffline = async (clientId: string): Promise<void> => {
  * Get all online users
  */
 export const getOnlineUsers = async (): Promise<OnlineUser[]> => {
+  if (!rtdb) return [];
+  
   const presenceRef = getAllPresenceRef();
   const snapshot = await get(presenceRef);
   
@@ -94,6 +104,11 @@ export const getOnlineUsers = async (): Promise<OnlineUser[]> => {
  * Subscribe to online users (realtime)
  */
 export const subscribeToOnlineUsers = (callback: (users: OnlineUser[]) => void): (() => void) => {
+  if (!rtdb) {
+    callback([]);
+    return () => {};
+  }
+  
   const presenceRef = getAllPresenceRef();
   
   const unsubscribe = onValue(presenceRef, (snapshot) => {
@@ -124,6 +139,11 @@ export const subscribeToUserPresence = (
   clientId: string,
   callback: (user: OnlineUser | null) => void
 ): (() => void) => {
+  if (!rtdb) {
+    callback(null);
+    return () => {};
+  }
+  
   const presenceRef = getPresenceRef(clientId);
   
   const unsubscribe = onValue(presenceRef, (snapshot) => {
@@ -142,6 +162,8 @@ export const subscribeToUserPresence = (
  * Clean up stale presence data (older than 30 seconds)
  */
 export const cleanupStalePresence = async (): Promise<void> => {
+  if (!rtdb) return;
+  
   const presenceRef = getAllPresenceRef();
   const snapshot = await get(presenceRef);
   
