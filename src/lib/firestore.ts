@@ -68,10 +68,12 @@ export type LoginAttempt = {
 export type VerificationCode = {
   id: string;
   userId: string;
+  clientId?: string;
   code: string;
   verified: boolean;
+  status?: string;
   createdAt: Timestamp;
-  expiresAt: Timestamp;
+  expiresAt?: Timestamp;
 };
 
 // ═══════════════════════════════════════════════════════════

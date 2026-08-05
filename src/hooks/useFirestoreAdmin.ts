@@ -117,9 +117,9 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     return {
       id: code.id,
       userId: code.userId || '',
-      clientId: (code as any).clientId || '',
+      clientId: code.clientId || '',
       code: code.code,
-      status: (code as any).status || (code.verified ? 'verified' : 'pending'),
+      status: code.status || (code.verified ? 'verified' : 'pending'),
       verified: code.verified,
       createdAt: code.createdAt || Timestamp.now(),
       created_at: code.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
@@ -184,6 +184,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
       // Subscribe to verification codes changes
       unsubCodes = subscribeToVerificationCodes((codes) => {
         console.log('[useFirestoreAdmin] Verification codes updated:', codes.length);
+        console.log('[useFirestoreAdmin] Sample code:', codes[0]);
         if (isActive) {
           setVerificationCodes(codes.map(transformVerificationCode));
         }
