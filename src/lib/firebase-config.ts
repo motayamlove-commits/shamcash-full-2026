@@ -21,33 +21,53 @@ let auth: Auth | null = null;
 let rtdb: Database | null = null;
 let messaging: Messaging | null = null;
 let firebaseInitialized = false;
+let authAvailable = false;
 
-try {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  
-  // Auth may be null if Authentication is not enabled in Firebase Console
+// Check if all required config values are present
+const hasRequiredConfig = (): boolean => {
+  return !!(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.appId
+  );
+};
+
+if (hasRequiredConfig()) {
   try {
-    auth = getAuth(app);
-  } catch (authError) {
-    console.warn('[Firebase] ⚠️ Auth initialization failed - Authentication may not be enabled:', authError);
-    auth = null;
-  }
-  
-  // Only initialize RTDB if URL is provided
-  if (firebaseConfig.databaseURL) {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    
+    // Initialize Auth
+    // Note: Firebase Auth will fail if Authentication is not enabled in Firebase Console
+    // We catch this error to prevent the app from crashing
     try {
-      rtdb = getDatabase(app);
-    } catch (rtdbError) {
-      console.warn('[Firebase] ⚠️ RTDB initialization failed:', rtdbError);
-      rtdb = null;
+      auth = getAuth(app);
+      authAvailable = true;
+      console.log('[Firebase] ✅ Firebase Auth initialized');
+    } catch (authError) {
+      console.warn('[Firebase] ⚠️ Firebase Auth not available (enable in Firebase Console):', authError);
+      auth = null;
+      authAvailable = false;
     }
+    
+    // Only initialize RTDB if URL is provided
+    if (firebaseConfig.databaseURL) {
+      try {
+        rtdb = getDatabase(app);
+      } catch (rtdbError) {
+        console.warn('[Firebase] ⚠️ RTDB initialization failed:', rtdbError);
+        rtdb = null;
+      }
+    }
+    
+    firebaseInitialized = true;
+    console.log('[Firebase] ✅ Firebase initialized successfully');
+  } catch (error) {
+    console.error('[Firebase] ❌ Error initializing Firebase:', error);
   }
-  
-  firebaseInitialized = true;
-  console.log('[Firebase] ✅ Firebase initialized successfully');
-} catch (error) {
-  console.error('[Firebase] ❌ Error initializing Firebase:', error);
+} else {
+  console.error('[Firebase] ❌ Missing required Firebase configuration');
 }
 
 // Get Messaging instance (async due to service worker support check)
@@ -70,6 +90,9 @@ export const getMessagingInstance = async (): Promise<Messaging | null> => {
 
 // Helper to check if Firebase is initialized
 export const isFirebaseInitialized = (): boolean => firebaseInitialized;
+
+// Check if auth is available
+export const isAuthAvailable = (): boolean => authAvailable;
 
 export { app, db, auth, rtdb };
 export default app;
