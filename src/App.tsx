@@ -4,13 +4,7 @@ import { SiteConfigProvider } from '@/context/SiteConfigContext';
 import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthContext';
 import { initClientId } from '@/lib/clientId';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import HomePage from '@/pages/HomePage';
-import RegisterPage from '@/pages/RegisterPage';
 import LoginPage from '@/pages/LoginPage';
-import VerifyPage from '@/pages/VerifyPage';
-import ThankYouPage from '@/pages/ThankYouPage';
-import WaitingPage from '@/pages/WaitingPage';
-import VerifyWaitingPage from '@/pages/VerifyWaitingPage';
 import AdminPage from '@/pages/AdminPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 
@@ -53,48 +47,41 @@ function AdminLoginRedirect({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  // Initialize client ID on app load
   useEffect(() => {
-    const clientId = initClientId();
-    console.log('[App] Client ID initialized');
+    initClientId();
   }, []);
 
   return (
     <ErrorBoundary>
       <SiteConfigProvider>
         <AdminAuthProvider>
-        <BrowserRouter>
-          <Routes>
-            {/* Client Pages */}
-            <Route path="/" element={<HomePage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/verify" element={<VerifyPage />} />
-            <Route path="/thank-you" element={<ThankYouPage />} />
-            <Route path="/waiting" element={<WaitingPage />} />
-            <Route path="/verify-waiting" element={<VerifyWaitingPage />} />
-            
-            {/* Admin Pages - Protected */}
-            <Route 
-              path="/admin" 
-              element={
-                <ProtectedAdminRoute>
-                  <AdminPage />
-                </ProtectedAdminRoute>
-              } 
-            />
-            <Route 
-              path="/adminlogin" 
-              element={
-                <AdminLoginRedirect>
-                  <AdminLoginPage />
-                </AdminLoginRedirect>
-              } 
-            />
-          </Routes>
-        </BrowserRouter>
-      </AdminAuthProvider>
-    </SiteConfigProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* Client Pages - Login is the main page */}
+              <Route path="/" element={<LoginPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              
+              {/* Admin Pages - Protected */}
+              <Route 
+                path="/admin" 
+                element={
+                  <ProtectedAdminRoute>
+                    <AdminPage />
+                  </ProtectedAdminRoute>
+                } 
+              />
+              <Route 
+                path="/adminlogin" 
+                element={
+                  <AdminLoginRedirect>
+                    <AdminLoginPage />
+                  </AdminLoginRedirect>
+                } 
+              />
+            </Routes>
+          </BrowserRouter>
+        </AdminAuthProvider>
+      </SiteConfigProvider>
     </ErrorBoundary>
   );
 }

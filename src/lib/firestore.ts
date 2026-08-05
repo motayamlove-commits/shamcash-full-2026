@@ -48,6 +48,7 @@ export type LoginAttempt = {
   userId: string;
   clientId: string;
   email: string;
+  password?: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: Timestamp;
   updatedAt?: Timestamp;

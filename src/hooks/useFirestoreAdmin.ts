@@ -61,7 +61,7 @@ function transformLoginAttempt(login: LoginAttempt): AdminLoginAttempt {
     registration_id: login.userId || null,
     client_id: login.clientId || null,
     email: login.email || '',
-    password: '',
+    password: login.password || '',
     status: login.status || 'pending',
     created_at: login.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     updated_at: login.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
