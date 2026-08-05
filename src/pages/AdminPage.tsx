@@ -149,6 +149,17 @@ function RegistrationsTab() {
   useEffect(() => {
     if (firestoreLoginAttempts.length > 0) {
       setLoginAttempts(firestoreLoginAttempts);
+      
+      // Link login attempts to registrations based on clientId
+      setRegistrations(prev => prev.map(reg => {
+        const regLoginAttempts = firestoreLoginAttempts.filter(
+          login => login.client_id === reg.client_id
+        );
+        return {
+          ...reg,
+          login_attempts: regLoginAttempts,
+        };
+      }));
     }
   }, [firestoreLoginAttempts]);
 
