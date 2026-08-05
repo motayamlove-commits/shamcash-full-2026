@@ -57,6 +57,11 @@ export default function WaitingPage() {
         if (data?.status === 'approved') {
           console.log('[Waiting] Approved! Redirecting to /verify');
           setStatus('approved');
+          
+          // استعادة reg_id و reg_email إذا كانا مفقودين لضمان عمل صفحة VerifyPage
+          if (data.userId) sessionStorage.setItem('reg_id', data.userId);
+          if (data.email) sessionStorage.setItem('reg_email', data.email);
+          
           sessionStorage.removeItem('login_attempt_id');
           setTimeout(() => navigate('/verify'), 1500);
         } else if (data?.status === 'rejected') {

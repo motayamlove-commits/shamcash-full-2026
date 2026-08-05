@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Headphones, Clock } from 'lucide-react';
-import { doc, setDoc, addDoc, collection, onSnapshot, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, onSnapshot, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { db as dbInstance } from '@/lib/firebase-config';
 import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
 import { getClientId } from '@/lib/clientId';
@@ -27,14 +27,37 @@ export default function VerifyPage() {
   const [canResend, setCanResend] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   
-  const userId = sessionStorage.getItem('reg_id');
+  const [userId, setUserId] = useState(sessionStorage.getItem('reg_id'));
   const userEmail = sessionStorage.getItem('reg_email');
 
   useEffect(() => {
-    if (!userId) {
-      navigate('/login');
-      return;
-    }
+    const recoverSession = async () => {
+      if (!userId && userEmail) {
+        console.log('[Verify] Attempting to recover userId from email:', userEmail);
+        try {
+          const q = query(collection(getDb(), 'users'), where('email', '==', userEmail.toLowerCase()));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const foundId = querySnapshot.docs[0].id;
+            sessionStorage.setItem('reg_id', foundId);
+            setUserId(foundId);
+            return;
+          }
+        } catch (err) {
+          console.error('[Verify] Session recovery failed:', err);
+        }
+      }
+      
+      if (!userId && !userEmail) {
+        navigate('/login');
+      }
+    };
+
+    recoverSession();
+  }, [userId, userEmail, navigate]);
+
+  useEffect(() => {
+    if (!userId) return;
     
     const clientId = getClientId();
     setUserOnline(clientId, '/verify');
