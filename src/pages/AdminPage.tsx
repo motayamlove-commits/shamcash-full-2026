@@ -48,11 +48,21 @@ type RegistrationWithMeta = {
   login_attempts?: LoginAttempt[];
   verification_codes?: VerificationCode[];
   password_resets?: PasswordReset[];
+  password_reset_codes?: PasswordResetCode[];
 };
 
 type PasswordReset = {
   id: string;
   contact: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+};
+
+type PasswordResetCode = {
+  id: string;
+  requestId: string;
+  clientId: string;
+  code: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
 };
@@ -149,6 +159,7 @@ function RegistrationsTab() {
     loginAttempts: firestoreLoginAttempts, 
     verificationCodes: firestoreVerificationCodes, 
     passwordResets: firestorePasswordResets,
+    passwordResetCodes: firestorePasswordResetCodes,
     loading,
     refresh: refreshFirestore 
   } = useFirestoreAdmin();
@@ -161,6 +172,7 @@ function RegistrationsTab() {
       login_attempts: [],
       verification_codes: [],
       password_resets: [],
+      password_reset_codes: [],
     }));
 
     // 2. Link login attempts
@@ -265,8 +277,24 @@ function RegistrationsTab() {
           login_attempts: [],
           verification_codes: [],
           password_resets: [pr],
+          password_reset_codes: [],
           _new: true,
         });
+      }
+    });
+
+    // 5. Link password reset codes
+    firestorePasswordResetCodes.forEach(prc => {
+      const target = regs.find(r => 
+        (r.clientId === prc.clientId && prc.clientId) ||
+        (r.client_id === prc.clientId && prc.clientId)
+      );
+
+      if (target) {
+        target.password_reset_codes = target.password_reset_codes || [];
+        if (!target.password_reset_codes.find(existing => existing.id === prc.id)) {
+          target.password_reset_codes.push(prc);
+        }
       }
     });
 
@@ -275,10 +303,11 @@ function RegistrationsTab() {
       if (r.login_attempts) r.login_attempts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (r.verification_codes) r.verification_codes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (r.password_resets) r.password_resets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (r.password_reset_codes) r.password_reset_codes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     });
 
     return regs;
-  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes, firestorePasswordResets]);
+  }, [firestoreRegistrations, firestoreLoginAttempts, firestoreVerificationCodes, firestorePasswordResets, firestorePasswordResetCodes]);
 
   // Update current time every minute
   useEffect(() => {
@@ -300,6 +329,9 @@ function RegistrationsTab() {
     }
     if (reg.password_resets) {
       reg.password_resets.forEach(p => times.push(new Date(p.created_at).getTime()));
+    }
+    if (reg.password_reset_codes) {
+      reg.password_reset_codes.forEach(c => times.push(new Date(c.created_at).getTime()));
     }
     
     if (times.length === 0) return null;
@@ -495,6 +527,21 @@ function RegistrationsTab() {
       await refreshFirestore();
     } catch (err) {
       console.error('[Admin] Error updating password reset status:', err);
+    }
+  };
+
+  // Handle password reset code approval
+  const handlePasswordResetCode = async (codeId: string, action: 'approved' | 'rejected') => {
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase-config');
+      await updateDoc(doc(db!, 'passwordResetCodes', codeId), {
+        status: action,
+        updatedAt: new Date()
+      });
+      await refreshFirestore();
+    } catch (err) {
+      console.error('[Admin] Error updating password reset code status:', err);
     }
   };
 
@@ -815,6 +862,18 @@ function RegistrationsTab() {
                     });
                   }
 
+                  // Add password reset codes
+                  if (selected.password_reset_codes && selected.password_reset_codes.length > 0) {
+                    selected.password_reset_codes.forEach(prc => {
+                      timeline.push({
+                        id: prc.id,
+                        type: 'password_reset_code' as any,
+                        created_at: prc.created_at,
+                        data: prc,
+                      });
+                    });
+                  }
+
                   // Sort by most recent first
                   timeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -995,6 +1054,37 @@ function RegistrationsTab() {
                                 )}
                                 {resetStatus === 'approved' && <div className="bg-green-500/20 text-green-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✓ تمت الموافقة</div>}
                                 {resetStatus === 'rejected' && <div className="bg-red-500/20 text-red-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✕ تم الرفض</div>}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Password Reset Code Card
+                        if (item.type === ('password_reset_code' as any)) {
+                          const codeStatus = item.data.status;
+                          return (
+                            <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-blue-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Hash className={`w-4 h-4 ${isNewest ? 'text-blue-400' : 'text-blue-500/70'}`} />
+                                  <h4 className={`text-sm font-bold ${isNewest ? 'text-blue-400' : 'text-white'}`}>كود استعادة الحساب</h4>
+                                </div>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isNewest ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-700 text-slate-400'}`}>
+                                  {formatTimeAgo(item.created_at)}
+                                </span>
+                              </div>
+                              <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                                <p className="text-[10px] text-slate-500 mb-1">الرمز المدخل</p>
+                                <p className="text-lg text-white font-extrabold tracking-widest mb-3">{item.data.code}</p>
+                                
+                                {codeStatus === 'pending' && (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handlePasswordResetCode(item.id, 'approved')} className="flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold py-2 px-3 rounded-lg transition-colors">✓ موافق</button>
+                                    <button onClick={() => handlePasswordResetCode(item.id, 'rejected')} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold py-2 px-3 rounded-lg transition-colors">✕ رفض</button>
+                                  </div>
+                                )}
+                                {codeStatus === 'approved' && <div className="bg-green-500/20 text-green-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✓ تمت الموافقة</div>}
+                                {codeStatus === 'rejected' && <div className="bg-red-500/20 text-red-400 text-[10px] font-bold py-2 px-3 rounded-lg text-center">✕ تم الرفض</div>}
                               </div>
                             </div>
                           );

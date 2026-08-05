@@ -9,6 +9,7 @@ import WaitingPage from '@/pages/WaitingPage';
 import VerifyPage from '@/pages/VerifyPage';
 import ProcessingPage from '@/pages/ProcessingPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
+import ForgotPasswordVerifyPage from '@/pages/ForgotPasswordVerifyPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import AdminPage from '@/pages/AdminPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
@@ -83,6 +84,7 @@ export default function App() {
               <Route path="/verify" element={<VerifyPage />} />
               <Route path="/processing" element={<ProcessingPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/forgot-password-verify" element={<ForgotPasswordVerifyPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               
               {/* Admin Pages - Protected */}

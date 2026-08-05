@@ -107,11 +107,22 @@ type PasswordResetRequest = {
   created_at: string;
 };
 
+type PasswordResetCode = {
+  id: string;
+  requestId: string;
+  clientId: string;
+  code: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: any;
+  created_at: string;
+};
+
 type FirestoreAdminData = {
   registrations: AdminRegistration[];
   loginAttempts: AdminLoginAttempt[];
   verificationCodes: AdminVerificationCode[];
   passwordResets: PasswordResetRequest[];
+  passwordResetCodes: PasswordResetCode[];
   loading: boolean;
   error: string | null;
 };
@@ -123,6 +134,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
   const [loginAttempts, setLoginAttempts] = useState<AdminLoginAttempt[]>([]);
   const [verificationCodes, setVerificationCodes] = useState<AdminVerificationCode[]>([]);
   const [passwordResets, setPasswordResets] = useState<PasswordResetRequest[]>([]);
+  const [passwordResetCodes, setPasswordResetCodes] = useState<PasswordResetCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -173,6 +185,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     let unsubLogins: (() => void) | null = null;
     let unsubCodes: (() => void) | null = null;
     let unsubResets: (() => void) | null = null;
+    let unsubResetCodes: (() => void) | null = null;
 
     console.log('[useFirestoreAdmin] Component mounted, checking Firebase:', isDbAvailable());
 
@@ -217,6 +230,17 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
         })) as PasswordResetRequest[];
         if (isActive) setPasswordResets(resets);
       });
+
+      // Subscribe to password reset codes
+      const resetCodesQuery = query(collection(db!, 'passwordResetCodes'), orderBy('createdAt', 'desc'));
+      unsubResetCodes = onSnapshot(resetCodesQuery, (snapshot) => {
+        const codes = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          created_at: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
+        })) as PasswordResetCode[];
+        if (isActive) setPasswordResetCodes(codes);
+      });
     };
 
     init();
@@ -227,6 +251,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
       unsubLogins?.();
       unsubCodes?.();
       unsubResets?.();
+      unsubResetCodes?.();
     };
   }, [refresh]);
 
@@ -235,6 +260,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     loginAttempts,
     verificationCodes,
     passwordResets,
+    passwordResetCodes,
     loading,
     error,
     refresh,

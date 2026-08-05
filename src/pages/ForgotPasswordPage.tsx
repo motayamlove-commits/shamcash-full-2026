@@ -70,6 +70,7 @@ export default function ForgotPasswordPage() {
 
       setStatus('waiting');
       updateUserPage(clientId, '/forgot-password-waiting');
+      sessionStorage.setItem('password_reset_request_id', docRef.id);
 
       // Listen for admin decision
       const unsubscribe = onSnapshot(doc(db!, 'passwordResets', docRef.id), (snapshot) => {
@@ -78,7 +79,7 @@ export default function ForgotPasswordPage() {
           if (data.status === 'approved') {
             setStatus('approved');
             unsubscribe();
-            setTimeout(() => navigate('/reset-password'), 1500);
+            setTimeout(() => navigate('/forgot-password-verify'), 1500);
           } else if (data.status === 'rejected') {
             setStatus('idle');
             setLoading(false);
