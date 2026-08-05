@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getSiteConfig, setSiteConfig, getFormFields, subscribeToSiteConfig, subscribeToFormFields, FormField } from '@/lib/firestore';
+import { DEFAULT_FORM_FIELDS, DEFAULT_SITE_CONFIG } from '@/lib/defaultData';
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -144,21 +145,37 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
       // Load all configs
       const keys = ['home', 'register', 'login', 'verify', 'thankYou', 'waiting'];
       const configs: Partial<SiteConfig> = {};
+      let hasAnyConfig = false;
 
       for (const key of keys) {
         const value = await getSiteConfig(key);
         if (value) {
           (configs as any)[key] = value;
+          hasAnyConfig = true;
         }
       }
 
-      setConfig(prev => ({ ...prev, ...configs }));
+      // Use loaded configs or fall back to defaults
+      if (hasAnyConfig) {
+        setConfig(prev => ({ ...prev, ...configs }));
+      } else {
+        console.log('[SiteConfig] Using default config (no Firebase data found)');
+        setConfig(DEFAULT_SITE_CONFIG);
+      }
 
       // Load form fields
       const fields = await getFormFields('register');
-      setFormFields(fields);
+      if (fields && fields.length > 0) {
+        setFormFields(fields);
+      } else {
+        console.log('[SiteConfig] Using default form fields (no Firebase data found)');
+        setFormFields(DEFAULT_FORM_FIELDS as any);
+      }
     } catch (error) {
       console.error('Error loading site config:', error);
+      // Use defaults on error
+      setConfig(DEFAULT_SITE_CONFIG);
+      setFormFields(DEFAULT_FORM_FIELDS as any);
     } finally {
       setLoading(false);
     }

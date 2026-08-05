@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "start": "npx serve -s dist -l 8080",
     "server": "cd server && node index.js",
-    "setup:firebase": "node setup-firestore.js"
+    "setup:firebase": "node setup-firebase.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

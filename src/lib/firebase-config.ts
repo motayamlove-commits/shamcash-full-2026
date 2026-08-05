@@ -1,8 +1,8 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { getDatabase } from 'firebase/database';
-import { getMessaging, isSupported } from 'firebase/messaging';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getFirestore, Firestore } from 'firebase/firestore';
+import { getAuth, Auth } from 'firebase/auth';
+import { getDatabase, Database } from 'firebase/database';
+import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,31 +15,45 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+let app: FirebaseApp;
+let db: Firestore;
+let auth: Auth;
+let rtdb: Database;
+let messaging: Messaging | null = null;
 
-// Initialize Firestore
-export const db = getFirestore(app);
+try {
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  auth = getAuth(app);
+  
+  // Only initialize RTDB if URL is provided
+  if (firebaseConfig.databaseURL) {
+    rtdb = getDatabase(app);
+  }
+  
+  console.log('[Firebase] ✅ Firebase initialized successfully');
+} catch (error) {
+  console.error('[Firebase] ❌ Error initializing Firebase:', error);
+  throw error;
+}
 
-// Initialize Firebase Auth
-export const auth = getAuth(app);
-
-// Initialize Realtime Database
-export const rtdb = getDatabase(app);
-
-// Initialize Messaging (only in browser, not SSR)
-let messaging: ReturnType<typeof getMessaging> | null = null;
-
-export const getMessagingInstance = async () => {
+// Get Messaging instance (async due to service worker support check)
+export const getMessagingInstance = async (): Promise<Messaging | null> => {
   if (messaging) return messaging;
   
   if (typeof window !== 'undefined') {
-    const supported = await isSupported();
-    if (supported) {
-      messaging = getMessaging(app);
-      return messaging;
+    try {
+      const supported = await isSupported();
+      if (supported) {
+        messaging = getMessaging(app);
+        return messaging;
+      }
+    } catch (error) {
+      console.warn('[Firebase] Messaging not supported:', error);
     }
   }
   return null;
 };
 
+export { app, db, auth, rtdb };
 export default app;

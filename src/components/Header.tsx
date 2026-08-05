@@ -11,8 +11,7 @@ const navItems = [
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
-  const { config } = useSiteConfig();
-  const h = config.header;
+  // Header uses hardcoded values, no need for config
 
   return (
     <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50">

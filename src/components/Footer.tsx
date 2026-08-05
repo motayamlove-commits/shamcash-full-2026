@@ -1,11 +1,7 @@
 import { Building2, Mail, Phone, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useSiteConfig } from '@/context/SiteConfigContext';
 
 export default function Footer() {
-  const { config } = useSiteConfig();
-  const f = config.footer;
-
   return (
     <footer className="bg-slate-800 text-slate-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
@@ -15,9 +11,9 @@ export default function Footer() {
               <div className="w-9 h-9 bg-blue-500 rounded-lg flex items-center justify-center">
                 <Building2 className="w-5 h-5 text-white" />
               </div>
-              <span className="text-white font-bold text-base">{config.header.logo_text}</span>
+              <span className="text-white font-bold text-base">شام كاش</span>
             </div>
-            <p className="text-sm leading-relaxed text-slate-400">{f.brand_description}</p>
+            <p className="text-sm leading-relaxed text-slate-400">نظام طلبات التمويل - نقدم لك أفضل خدمات التمويل بسهولة وأمان</p>
           </div>
 
           <div>
@@ -39,22 +35,22 @@ export default function Footer() {
             <ul className="space-y-3 text-sm">
               <li className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>{f.contact_email}</span>
+                <span>info@shamcash.sy</span>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-blue-400 shrink-0" />
-                <span dir="ltr">{f.contact_phone}</span>
+                <span dir="ltr">+963 XX XXX XXXX</span>
               </li>
               <li className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>{f.contact_address}</span>
+                <span>دمشق، سوريا</span>
               </li>
             </ul>
           </div>
         </div>
 
         <div className="border-t border-slate-700 mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <p>© 2024 {config.header.logo_text}. جميع الحقوق محفوظة.</p>
+          <p>© 2024 شام كاش. جميع الحقوق محفوظة.</p>
           <p>مبني بتقنيات حديثة وآمنة</p>
         </div>
       </div>
