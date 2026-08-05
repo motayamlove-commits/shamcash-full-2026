@@ -397,7 +397,7 @@ function RegistrationsTab() {
   };
 
   // Login attempts pending count
-  const pendingLogins = loginAttempts.filter(l => l.status === 'pending').length;
+  const pendingLogins = firestoreLoginAttempts.filter(l => l.status === 'pending').length;
 
   // Handle approve/reject login attempts
   const handleLoginAttempt = async (id: string, action: 'approved' | 'rejected') => {
@@ -408,10 +408,6 @@ function RegistrationsTab() {
       await updateLoginAttempt(id, { status: action });
       console.log('[Admin] Login attempt updated successfully');
       
-      // Update local state
-      setLoginAttempts(prev => prev.map(l => 
-        l.id === id ? { ...l, status: action as 'approved' | 'rejected' } : l
-      ));
       await refreshFirestore();
     } catch (err) {
       console.error('Login attempt update error:', err);
@@ -428,10 +424,6 @@ function RegistrationsTab() {
         logoutNotice: true,
       });
       
-      // Update local state
-      setLoginAttempts(prev => prev.map(l => 
-        l.id === id ? { ...l, status: 'rejected' as const, logout_notice: true } : l
-      ));
       await refreshFirestore();
     } catch (err) {
       console.error('Logout notice error:', err);
