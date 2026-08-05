@@ -486,8 +486,8 @@ function RegistrationsTab() {
   // Handle password reset approval
   const handlePasswordReset = async (requestId: string, action: 'approved' | 'rejected') => {
     try {
-      const { doc, updateDoc } = await import('firebase/firestore');
-      const { db } = await import('@/lib/firestore');
+      const { doc, updateDoc, getFirestore } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase-config');
       await updateDoc(doc(db!, 'passwordResets', requestId), {
         status: action,
         updatedAt: new Date()

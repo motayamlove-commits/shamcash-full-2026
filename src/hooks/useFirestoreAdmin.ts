@@ -11,9 +11,9 @@ import {
   VerificationCode,
   Timestamp,
   isDbAvailable,
-  db,
 } from '@/lib/firestore';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getFirestore, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase-config';
 
 // Transform Firestore data to match AdminPage format
 type AdminRegistration = {
