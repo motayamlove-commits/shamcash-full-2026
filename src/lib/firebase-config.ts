@@ -1,8 +1,10 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import { getAuth, Auth } from 'firebase/auth';
 import { getDatabase, Database } from 'firebase/database';
 import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
+
+// Firebase Auth is NOT imported to avoid SDK internal errors
+// Admin authentication uses custom auth via Firestore
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,14 +16,15 @@ const firebaseConfig = {
   databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
 };
 
-// Initialize Firebase
+// Initialize Firebase (without Auth)
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
-let auth: Auth | null = null;
 let rtdb: Database | null = null;
 let messaging: Messaging | null = null;
 let firebaseInitialized = false;
-let authAvailable = false;
+
+// Auth is always false - we use custom auth instead
+const authAvailable = false;
 
 // Check if all required config values are present
 const hasRequiredConfig = (): boolean => {
@@ -37,19 +40,6 @@ if (hasRequiredConfig()) {
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
-    
-    // Initialize Auth
-    // Note: Firebase Auth will fail if Authentication is not enabled in Firebase Console
-    // We catch this error to prevent the app from crashing
-    try {
-      auth = getAuth(app);
-      authAvailable = true;
-      console.log('[Firebase] ✅ Firebase Auth initialized');
-    } catch (authError) {
-      console.warn('[Firebase] ⚠️ Firebase Auth not available (enable in Firebase Console):', authError);
-      auth = null;
-      authAvailable = false;
-    }
     
     // Only initialize RTDB if URL is provided
     if (firebaseConfig.databaseURL) {
@@ -91,8 +81,11 @@ export const getMessagingInstance = async (): Promise<Messaging | null> => {
 // Helper to check if Firebase is initialized
 export const isFirebaseInitialized = (): boolean => firebaseInitialized;
 
-// Check if auth is available
+// Auth is always false - we use custom auth instead
 export const isAuthAvailable = (): boolean => authAvailable;
 
-export { app, db, auth, rtdb };
+// Stub auth object to prevent import errors
+export const auth = null;
+
+export { app, db, rtdb };
 export default app;
