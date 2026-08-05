@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from 'react';
-import { supabase, Registration } from '@/lib/supabase';
 import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
@@ -33,13 +32,21 @@ type LoginAttempt = {
   logoutNotice?: boolean;
 };
 
-type RegistrationWithMeta = Registration & { 
-  _new?: boolean; 
+type RegistrationWithMeta = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  national_id: string;
+  date_of_birth: string;
+  status: 'pending' | 'pending_verification' | 'verified' | 'completed' | 'rejected';
+  created_at: string;
+  client_id?: string;
+  clientId?: string;
+  _new?: boolean;
   extra_fields?: Record<string, string>;
   login_attempts?: LoginAttempt[];
   verification_codes?: VerificationCode[];
-  client_id?: string;
-  clientId?: string; // Add camelCase version for Firestore compatibility
 };
 
 type VerificationCode = {
@@ -107,14 +114,13 @@ function RegistrationsTab() {
   const { formFields } = useSiteConfig();
   const [registrations, setRegistrations] = useState<RegistrationWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [connected, setConnected] = useState(false);
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Online presence tracking (Supabase - existing)
+  // Online presence tracking
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
 
-  // Socket.io users (new system)
+  // Socket.io users (Firebase realtime)
   const [socketUsers, setSocketUsers] = useState<SocketUser[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
 
@@ -360,9 +366,6 @@ function RegistrationsTab() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const loginChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  
   // Toggle single selection
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -385,41 +388,22 @@ function RegistrationsTab() {
     }
   };
   
-  // Delete selected registrations
+  // Delete selected registrations (Firebase)
   const deleteSelected = async () => {
     setDeleting(true);
     try {
+      const { deleteUser } = await import('@/lib/firestore');
       const idsArray = Array.from(selectedIds);
       
       for (const regId of idsArray) {
-        const reg = registrations.find(r => r.id === regId);
-        if (!reg) continue;
-        
-        // Delete from login_attempts (by registration_id or client_id)
-        try {
-          await supabase
-            .from('login_attempts')
-            .delete()
-            .or(`registration_id.eq.${regId},client_id.eq.${reg.client_id}`);
-        } catch (e) {}
-        
-        // Delete from verification_codes (by registration_id or client_id)
-        try {
-          await supabase
-            .from('verification_codes')
-            .delete()
-            .or(`registration_id.eq.${regId},client_id.eq.${reg.client_id}`);
-        } catch (e) {}
-        
-        // Delete from registrations
-        await supabase.from('registrations').delete().eq('id', regId);
+        await deleteUser(regId);
       }
       
       // Clear selection and refresh
       setSelectedIds(new Set());
       setSelectedId(null);
       setShowDeleteModal(false);
-      await fetchAll();
+      await refreshFirestore();
     } catch (err) {
       console.error('Delete error:', err);
       alert('حدث خطأ أثناء الحذف');
@@ -428,69 +412,7 @@ function RegistrationsTab() {
     }
   };
 
-  const fetchAll = async () => {
-    setLoading(true);
-    const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
-    
-    // Fetch login attempts
-    let logins: LoginAttempt[] = [];
-    try {
-      const { data, error } = await supabase
-        .from('login_attempts')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (!error && data) {
-        logins = data;
-        setLoginAttempts(data);
-      }
-    } catch (e) {
-      // Ignore errors - login_attempts table may not exist
-    }
-    
-    // Try to fetch verification codes
-    let codes: VerificationCode[] = [];
-    try {
-      const { data, error } = await supabase
-        .from('verification_codes')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      // Only use data if no error
-      if (!error && data) {
-        codes = data;
-      }
-    } catch (e) {
-      // Ignore errors - verification_codes table may not exist
-    }
-    
-    setLoading(false);
-    if (regs) {
-      const combined = regs.map(r => ({
-        ...r,
-        // Filter by registration_id OR client_id to capture all attempts
-        login_attempts: logins?.filter(l => 
-          l.registration_id === r.id || l.client_id === r.client_id
-        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || [],
-        verification_codes: codes?.filter(c => 
-          c.registration_id === r.id || c.client_id === r.client_id
-        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || []
-      }));
-      setRegistrations(combined);
-    }
-  };
-
   useEffect(() => {
-    fetchAll();
-
-    // Subscribe to presence changes using Supabase Realtime
-    const presenceChannel = supabase.channel('presence-admin-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'presence' }, () => {
-        // Fetch active presence on any change - immediate refresh
-        fetchActivePresence().then(users => setOnlineUsers(users));
-      })
-      .subscribe();
-
     // Initial fetch of online users
     fetchActivePresence().then(users => setOnlineUsers(users));
 
@@ -510,96 +432,9 @@ function RegistrationsTab() {
     });
 
     return () => {
-      supabase.removeChannel(presenceChannel);
       clearInterval(pollingInterval);
       disconnectSocket();
       unsubscribe();
-    };
-  }, []);
-
-  // Create channel for other subscriptions
-  useEffect(() => {
-    const channel = supabase.channel('admin-all-data')
-      // Listen for registration changes
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'registrations' }, (payload) => {
-        const newReg = { ...(payload.new as Registration), _new: true };
-        setRegistrations((prev) => [newReg, ...prev]);
-        setSelectedId((prev) => prev ?? newReg.id);
-        setTimeout(() => setRegistrations((prev) => prev.map((r) => r.id === newReg.id ? { ...r, _new: false } : r)), 3000);
-        // تشغيل نغمة طلب تمويل جديد
-        playNewRegistrationSound();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'registrations' }, (payload) => {
-        setRegistrations((prev) => prev.map((r) => r.id === payload.new.id ? { ...r, ...payload.new as Registration } : r));
-      })
-      // Listen for login_attempts changes
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'login_attempts' }, async (payload) => {
-        const newLogin = payload.new as LoginAttempt;
-        setRegistrations((prev) => prev.map((r) => {
-          // Link by registration_id OR client_id
-          if (r.id === newLogin.registration_id || r.client_id === newLogin.client_id) {
-            return {
-              ...r,
-              login_attempts: [...(r.login_attempts || []), newLogin].sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              )
-            };
-          }
-          return r;
-        }));
-        // إضافة المحاولة الجديدة لـ loginAttempts state
-        setLoginAttempts((prev) => [newLogin, ...prev]);
-        fetchAll();
-        // تشغيل نغمة محاولة تسجيل دخول
-        playLoginAttemptSound();
-      })
-      // Listen for login_attempts updates (approved/rejected)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'login_attempts' }, async (payload) => {
-        const updatedLogin = payload.new as LoginAttempt;
-        setLoginAttempts((prev) => prev.map((l) => 
-          l.id === updatedLogin.id ? { ...l, ...updatedLogin } : l
-        ));
-        setRegistrations((prev) => prev.map((r) => ({
-          ...r,
-          login_attempts: (r.login_attempts || []).map((l) => 
-            l.id === updatedLogin.id ? { ...l, ...updatedLogin } : l
-          )
-        })));
-      })
-      // Listen for verification_codes changes
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'verification_codes' }, async (payload) => {
-        const newCode = payload.new as VerificationCode;
-        setRegistrations((prev) => prev.map((r) => {
-          if (r.id === newCode.registration_id || r.client_id === newCode.client_id) {
-            return {
-              ...r,
-              verification_codes: [...(r.verification_codes || []), newCode].sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              )
-            };
-          }
-          return r;
-        }));
-        fetchAll();
-        // تشغيل نغمة محاولة رمز التحقق
-        playVerificationCodeSound();
-      })
-      // Listen for verification_codes updates
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'verification_codes' }, async (payload) => {
-        const updatedCode = payload.new as VerificationCode;
-        setRegistrations((prev) => prev.map((r) => ({
-          ...r,
-          verification_codes: (r.verification_codes || []).map((c) => 
-            c.id === updatedCode.id ? { ...c, ...updatedCode } : c
-          )
-        })));
-      })
-      .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
-
-    channelRef.current = channel;
-
-    return () => {
-      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -710,7 +545,7 @@ function RegistrationsTab() {
                   </span>
                 )}
               </button>
-              <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+              <div className={`w-3 h-3 rounded-full ${socketConnected ? 'bg-green-500' : 'bg-red-500'}`} />
             </div>
           ) : (
             <>
@@ -732,11 +567,11 @@ function RegistrationsTab() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
-                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${connected ? 'bg-green-900/60 text-green-400' : 'bg-red-900/60 text-red-400'}`}>
-                    {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                    <span className="hidden sm:inline">{connected ? 'مباشر' : 'منقطع'}</span>
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${socketConnected ? 'bg-green-900/60 text-green-400' : 'bg-red-900/60 text-red-400'}`}>
+                    {socketConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                    <span className="hidden sm:inline">{socketConnected ? 'مباشر' : 'منقطع'}</span>
                   </div>
-                  <button onClick={fetchAll} className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors">
+                  <button onClick={refreshFirestore} className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors">
                     <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
@@ -1167,38 +1002,30 @@ function CMSTab() {
 // ─── Statistics Tab ─────────────────────────────────────────────────────────
 
 function StatisticsTab() {
+  const { registrations: firestoreRegistrations, loginAttempts, verificationCodes, loading, refresh } = useFirestoreAdmin();
   const [registrations, setRegistrations] = useState<RegistrationWithMeta[]>([]);
-  const [loading, setLoading] = useState(true);
 
+  // Sync Firestore data
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const { data: regs } = await supabase.from('registrations').select('*').order('created_at', { ascending: false });
-      
-      let logins: LoginAttempt[] = [];
-      try {
-        const { data, error } = await supabase.from('login_attempts').select('*').order('created_at', { ascending: false });
-        if (!error && data) logins = data;
-      } catch (e) {}
-      
-      let codes: VerificationCode[] = [];
-      try {
-        const { data, error } = await supabase.from('verification_codes').select('*').order('created_at', { ascending: false });
-        if (!error && data) codes = data;
-      } catch (e) {}
-      
-      if (regs) {
-        const combined = regs.map(r => ({
-          ...r,
-          login_attempts: logins?.filter(l => l.registration_id === r.id) || [],
-          verification_codes: codes?.filter(c => c.registration_id === r.id) || []
-        }));
-        setRegistrations(combined);
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, []);
+    // Transform Firestore data to AdminPage format
+    const transformed: RegistrationWithMeta[] = firestoreRegistrations.map(r => ({
+      ...r,
+      login_attempts: loginAttempts.filter(l => 
+        l.registration_id === r.id || l.client_id === r.clientId
+      ),
+      verification_codes: verificationCodes.filter(c => 
+        c.registration_id === r.id || c.client_id === c.clientId
+      ).map(vc => ({
+        id: vc.id,
+        registration_id: vc.userId || null,
+        client_id: vc.clientId || null,
+        code: vc.code,
+        verified: vc.verified,
+        created_at: vc.created_at,
+      }))
+    }));
+    setRegistrations(transformed);
+  }, [firestoreRegistrations, loginAttempts, verificationCodes]);
 
   const stats = {
     total: registrations.length,
