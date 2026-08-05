@@ -1,29 +1,17 @@
 /**
  * Firebase Cloud Messaging (FCM) Configuration
  * Sham Cash - Push Notifications System
+ * 
+ * Note: Uses app from firebase-config.ts which handles Auth properly
  */
 
 // Import Firebase modules
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage, Messaging, MessagePayload } from 'firebase/messaging';
-import { getAuth } from 'firebase/auth';
-
-// Firebase Configuration
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-};
+import { getToken, onMessage, MessagePayload } from 'firebase/messaging';
+import { app, isAuthAvailable } from './firebase-config';
 
 // VAPID Key for Web Push
 export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || '';
 
-// Initialize Firebase App (prevent multiple initializations)
-let app: FirebaseApp | null = null;
-let messaging: Messaging | null = null;
 let serviceWorkerRegistrationPromise: Promise<ServiceWorkerRegistration> | null = null;
 
 const UNIFIED_SERVICE_WORKER_URL = '/sw.js';
@@ -71,7 +59,7 @@ async function getUnifiedServiceWorkerRegistration(): Promise<ServiceWorkerRegis
 /**
  * Initialize Firebase and get Messaging instance
  */
-export async function initializeFirebase(): Promise<Messaging | null> {
+export async function initializeFirebase(): Promise<any> {
   try {
     console.log('[Firebase] initializeFirebase - starting...');
 
@@ -82,23 +70,23 @@ export async function initializeFirebase(): Promise<Messaging | null> {
     }
     console.log('[Firebase] initializeFirebase - browser supports FCM');
 
-    // Initialize Firebase only once
+    // Check if auth is available
+    if (!isAuthAvailable()) {
+      console.warn('[Firebase] initializeFirebase - Auth not available');
+      return null;
+    }
+    console.log('[Firebase] initializeFirebase - Auth is available');
+
+    // Check if app exists
     if (!app) {
-      console.log('[Firebase] initializeFirebase - creating new Firebase app');
-      app = getApps().length === 0 
-        ? initializeApp(firebaseConfig) 
-        : getApps()[0];
-      console.log('[Firebase] initializeFirebase - Firebase app created');
-    } else {
-      console.log('[Firebase] initializeFirebase - using existing Firebase app');
+      console.warn('[Firebase] initializeFirebase - App not initialized');
+      return null;
     }
 
-    // Get Messaging instance
-    if (!messaging) {
-      console.log('[Firebase] initializeFirebase - getting messaging...');
-      messaging = getMessaging(app);
-      console.log('[Firebase] initializeFirebase - messaging ready');
-    }
+    // Dynamic import getMessaging to avoid loading it when not needed
+    const { getMessaging } = await import('firebase/messaging');
+    const messaging = getMessaging(app);
+    console.log('[Firebase] initializeFirebase - messaging ready');
 
     return messaging;
   } catch (error: unknown) {
@@ -134,6 +122,12 @@ export async function requestPermissionAndGetToken(): Promise<{
     if (!isSupported()) {
       console.log('[Firebase] Browser does not support notifications');
       return { success: false, error: 'المتصفح لا يدعم الإشعارات' };
+    }
+    
+    // Check if auth is available
+    if (!isAuthAvailable()) {
+      console.log('[Firebase] Auth not available');
+      return { success: false, error: 'Firebase Auth غير متاح' };
     }
     
     console.log('[Firebase] Browser supports notifications');
@@ -187,6 +181,12 @@ export async function getCurrentToken(): Promise<string | null> {
     console.log('[Firebase] getCurrentToken - checking support...');
     if (!isSupported()) {
       console.log('[Firebase] getCurrentToken - not supported');
+      return null;
+    }
+
+    // Check if auth is available
+    if (!isAuthAvailable()) {
+      console.log('[Firebase] getCurrentToken - Auth not available');
       return null;
     }
 
