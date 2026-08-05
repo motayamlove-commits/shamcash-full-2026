@@ -3,7 +3,7 @@ import {
   Users, CheckCircle2, Clock, Activity, Eye, EyeOff,
   RefreshCw, Wifi, WifiOff, Shield, Calendar, Phone,
   CreditCard, Mail, Layout, List, User, Lock, FileText, Hash,
-  LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon, Volume2, VolumeX, Trash2, X, AlertTriangle
+  LogIn as LogInIcon, ShieldCheck, Copy, Check, Wifi as WifiIcon, Volume2, VolumeX, Trash2, X, AlertTriangle, Menu, MoreVertical
 } from 'lucide-react';
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { useAdminAuth } from '@/context/AdminAuthContext';
@@ -1098,6 +1098,7 @@ function StatisticsTab() {
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'registrations' | 'statistics' | 'cms' | 'security'>('registrations');
   const [soundEnabled, setSoundEnabled] = useState(getSoundEnabled());
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // Notifications state
   const [showNotificationModal, setShowNotificationModal] = useState(false);
@@ -1164,19 +1165,20 @@ export default function AdminPage() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-900 text-white overflow-hidden m-0 p-0" dir="rtl" style={{ margin: 0, padding: 0, width: '100vw', height: '100vh' }}>
-      <header className="shrink-0 bg-slate-800 border-b border-slate-700 px-4 py-4" style={{ margin: 0 }}>
+      <header className="shrink-0 bg-slate-800 border-b border-slate-700 px-3 py-3 md:px-4 md:py-4 relative z-50" style={{ margin: 0 }}>
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Shield className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg">
+              <Shield className="w-4 h-4 md:w-5 md:h-5 text-white" />
             </div>
             <div className="text-right">
-              <h1 className="text-base font-bold text-white">لوحة التحكم - شام كاش</h1>
-              <p className="text-xs text-slate-400">إدارة الموقع وطلبات التمويل</p>
+              <h1 className="text-sm md:text-base font-bold text-white leading-tight">لوحة التحكم - شام كاش</h1>
+              <p className="text-[10px] md:text-xs text-slate-400">إدارة الموقع وطلبات التمويل</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {/* زر كتم/تفعيل الصوت */}
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-3">
             <button
               onClick={handleToggleSound}
               className={`p-2.5 rounded-xl transition-all ${
@@ -1184,7 +1186,6 @@ export default function AdminPage() {
                   ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' 
                   : 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
               }`}
-              title={soundEnabled ? 'كتم الإشعارات الصوتية' : 'تفعيل الإشعارات الصوتية'}
             >
               {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
             </button>
@@ -1202,7 +1203,51 @@ export default function AdminPage() {
               ))}
             </div>
           </div>
+
+          {/* Mobile Menu Button */}
+          <div className="md:hidden flex items-center gap-2">
+            <button
+              onClick={handleToggleSound}
+              className={`p-2 rounded-lg transition-all ${
+                soundEnabled ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'
+              }`}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2 rounded-lg bg-slate-700 text-slate-300 hover:text-white"
+            >
+              {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Navigation Dropdown */}
+        {isMenuOpen && (
+          <div className="md:hidden absolute top-full left-0 right-0 bg-slate-800 border-b border-slate-700 shadow-2xl animate-in slide-in-from-top duration-200">
+            <div className="p-2 space-y-1">
+              {[
+                { key: 'registrations', label: 'طلبات التمويل', icon: List },
+                { key: 'statistics', label: 'إحصائيات', icon: Activity },
+                { key: 'cms', label: 'إدارة المحتوى', icon: Layout },
+                { key: 'security', label: 'الأمان', icon: Shield },
+              ].map(({ key, label, icon: Icon }) => (
+                <button 
+                  key={key} 
+                  onClick={() => {
+                    setActiveTab(key as any);
+                    setIsMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === key ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-700/50'}`}
+                >
+                  <Icon className="w-5 h-5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="flex-1 overflow-hidden flex flex-col">
