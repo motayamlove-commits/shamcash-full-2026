@@ -1,13 +1,3 @@
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  User,
-  sendPasswordResetEmail,
-  updatePassword,
-} from 'firebase/auth';
-import { auth, isAuthAvailable } from './firebase-config';
 import { doc, setDoc, Timestamp, getDoc } from 'firebase/firestore';
 import { db } from './firebase-config';
 
@@ -94,25 +84,10 @@ const getCustomCurrentUser = (): AdminUser | null => {
 
 /**
  * Sign in admin user with email and password
+ * Uses custom auth only (Firebase Auth is disabled for security)
  */
 export const signInAdmin = async (email: string, password: string): Promise<AdminUser> => {
-  // Check if Firebase Auth is available
-  if (auth && isAuthAvailable()) {
-    try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return {
-        uid: result.user.uid,
-        email: result.user.email || email,
-        displayName: result.user.displayName || undefined,
-        createdAt: new Date(result.user.metadata.creationTime || Date.now()),
-      };
-    } catch (error: any) {
-      // If Firebase Auth fails, fall back to custom auth
-      console.log('[Auth] Firebase Auth failed, using custom auth:', error?.message);
-    }
-  }
-  
-  // Use custom auth
+  // Always use custom auth for admin
   return customSignIn(email, password);
 };
 
@@ -146,98 +121,62 @@ export const createAdminUser = async (email: string, password: string, displayNa
  * Sign out current admin
  */
 export const signOutAdmin = async (): Promise<void> => {
-  if (auth && isAuthAvailable()) {
-    try {
-      await firebaseSignOut(auth);
-    } catch (error) {
-      console.warn('[Auth] Firebase sign out failed:', error);
-    }
-  }
   customSignOut();
 };
 
 /**
  * Listen to auth state changes
+ * Uses custom auth session only (no Firebase Auth dependency)
  */
 export const onAuthChange = (callback: (user: AdminUser | null) => void): (() => void) => {
-  // First, check custom auth session
+  // Check custom auth session immediately
   const customUser = getCustomCurrentUser();
-  if (customUser) {
-    callback(customUser);
-  }
+  callback(customUser);
   
-  // Then try Firebase Auth if available
-  if (auth && isAuthAvailable()) {
-    try {
-      return onAuthStateChanged(auth, (firebaseUser) => {
-        if (firebaseUser) {
-          callback({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || undefined,
-            createdAt: new Date(firebaseUser.metadata.creationTime || Date.now()),
-          });
-        } else {
-          // If Firebase Auth signs out but custom auth exists, keep custom user
-          const customUserCheck = getCustomCurrentUser();
-          if (customUserCheck) {
-            callback(customUserCheck);
-          } else {
-            callback(null);
-          }
-        }
-      });
-    } catch (error) {
-      console.warn('[Firebase Auth] onAuthStateChanged failed:', error);
-    }
-  }
+  // Set up a polling interval to check for session changes
+  const intervalId = setInterval(() => {
+    const currentUser = getCustomCurrentUser();
+    callback(currentUser);
+  }, 5000); // Check every 5 seconds
   
-  // Return empty unsubscribe function
-  return () => {};
+  // Return cleanup function
+  return () => {
+    clearInterval(intervalId);
+  };
 };
 
 /**
  * Get current user
+ * Uses custom auth session only
  */
 export const getCurrentUser = (): AdminUser | null => {
-  // Check Firebase Auth first
-  if (auth && isAuthAvailable()) {
-    const firebaseUser = auth.currentUser;
-    if (firebaseUser) {
-      return {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || '',
-        displayName: firebaseUser.displayName || undefined,
-        createdAt: new Date(firebaseUser.metadata.creationTime || Date.now()),
-      };
-    }
-  }
-  
-  // Fall back to custom auth
   return getCustomCurrentUser();
 };
 
 /**
  * Send password reset email
+ * Note: Requires manual password reset via Firebase Console when using custom auth
  */
 export const resetAdminPassword = async (email: string): Promise<void> => {
-  if (!auth || !isAuthAvailable()) {
-    throw new Error('Password reset requires Firebase Authentication to be enabled');
-  }
-  await sendPasswordResetEmail(auth, email);
+  // With custom auth, password reset must be done manually in Firebase Console
+  // or by updating the passwordHash field in Firestore
+  throw new Error('Password reset requires Firebase Authentication. Please contact support.');
 };
 
 /**
  * Update admin password
  */
 export const updateAdminPassword = async (newPassword: string): Promise<void> => {
-  if (!auth || !isAuthAvailable()) {
-    throw new Error('Password update requires Firebase Authentication to be enabled');
-  }
-  if (!auth.currentUser) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
     throw new Error('No user is currently signed in');
   }
-  await updatePassword(auth.currentUser, newPassword);
+  
+  // Update password in Firestore
+  await setDoc(doc(db, 'admins', currentUser.uid), {
+    passwordHash: newPassword,
+    updatedAt: Timestamp.now(),
+  }, { merge: true });
 };
 
 /**
