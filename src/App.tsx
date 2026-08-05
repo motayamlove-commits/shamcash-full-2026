@@ -5,6 +5,7 @@ import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthContext';
 import { initClientId } from '@/lib/clientId';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import LoginPage from '@/pages/LoginPage';
+import WaitingPage from '@/pages/WaitingPage';
 import AdminPage from '@/pages/AdminPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 
@@ -60,6 +61,7 @@ export default function App() {
               {/* Client Pages - Login is the main page */}
               <Route path="/" element={<LoginPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/waiting" element={<WaitingPage />} />
               
               {/* Admin Pages - Protected */}
               <Route 

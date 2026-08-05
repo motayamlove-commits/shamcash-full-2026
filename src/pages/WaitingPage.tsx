@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase-config';
+import { db, isFirebaseInitialized } from '@/lib/firebase-config';
 import { initSocket, disconnectSocket } from '@/lib/socket';
 
 // Logo Component
@@ -36,11 +36,16 @@ export default function WaitingPage() {
     const attemptId = sessionStorage.getItem('login_attempt_id');
     
     if (!attemptId) {
-      navigate('/login');
+      navigate('/');
       return;
     }
 
     // التحقق من حالة المحاولة باستخدام Firebase Firestore
+    if (!isFirebaseInitialized() || !db) {
+      // Firebase not initialized, just show waiting
+      return;
+    }
+
     const unsubscribe = onSnapshot(doc(db, 'loginAttempts', attemptId), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -48,7 +53,7 @@ export default function WaitingPage() {
         if (data?.status === 'approved') {
           setStatus('approved');
           sessionStorage.removeItem('login_attempt_id');
-          setTimeout(() => navigate('/verify'), 1500);
+          setTimeout(() => navigate('/'), 1500);
         } else if (data?.status === 'rejected') {
           setStatus('rejected');
           sessionStorage.removeItem('login_attempt_id');
@@ -58,7 +63,7 @@ export default function WaitingPage() {
             sessionStorage.setItem('logout_notice', 'true');
           }
           
-          setTimeout(() => navigate('/login'), 2000);
+          setTimeout(() => navigate('/'), 2000);
         }
       }
     });
