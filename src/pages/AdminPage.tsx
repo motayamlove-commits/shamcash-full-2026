@@ -408,7 +408,17 @@ function RegistrationsTab() {
       playVerificationCodeSound();
       setSeenCodeIds(prev => new Set([...prev, ...newUnseenCodes]));
     }
-  }, [firestoreLoginAttempts, firestoreVerificationCodes, isPanelCollapsed, loading, seenAttemptIds, seenCodeIds]);
+
+    // Track new password reset requests
+    const allResetIds = firestorePasswordResets.map(r => r.id);
+    const newUnseenResets = allResetIds.filter(id => !seenResetIds.has(id));
+
+    if (newUnseenResets.length > 0) {
+      console.log('[Admin] New password reset requests detected:', newUnseenResets);
+      playPasswordResetSound();
+      setSeenResetIds(prev => new Set([...prev, ...newUnseenResets]));
+    }
+  }, [firestoreLoginAttempts, firestoreVerificationCodes, firestorePasswordResets, isPanelCollapsed, loading, seenAttemptIds, seenCodeIds, seenResetIds]);
 
   // When panel is expanded, mark all as seen
   useEffect(() => {
