@@ -130,6 +130,7 @@ function RegistrationsTab() {
   // New attempts count (for badge when panel is collapsed)
   const [newAttemptsCount, setNewAttemptsCount] = useState(0);
   const [seenAttemptIds, setSeenAttemptIds] = useState<Set<string>>(new Set());
+  const [seenCodeIds, setSeenCodeIds] = useState<Set<string>>(new Set());
 
   // Current time state for time-ago updates (refreshes every minute)
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -279,19 +280,29 @@ function RegistrationsTab() {
   useEffect(() => {
     if (loading) return;
     
+    // Track new login attempts
     const allAttemptIds = firestoreLoginAttempts.map(a => a.id);
-    const newUnseen = allAttemptIds.filter(id => !seenAttemptIds.has(id));
+    const newUnseenAttempts = allAttemptIds.filter(id => !seenAttemptIds.has(id));
     
-    if (newUnseen.length > 0) {
-      setNewAttemptsCount(prev => prev + newUnseen.length);
+    if (newUnseenAttempts.length > 0) {
+      setNewAttemptsCount(prev => prev + newUnseenAttempts.length);
       playLoginAttemptSound();
       // Mark as seen immediately if panel is open
       if (!isPanelCollapsed) {
-        setSeenAttemptIds(prev => new Set([...prev, ...newUnseen]));
+        setSeenAttemptIds(prev => new Set([...prev, ...newUnseenAttempts]));
         setNewAttemptsCount(0);
       }
     }
-  }, [firestoreLoginAttempts, isPanelCollapsed, loading]);
+
+    // Track new verification codes
+    const allCodeIds = firestoreVerificationCodes.map(c => c.id);
+    const newUnseenCodes = allCodeIds.filter(id => !seenCodeIds.has(id));
+
+    if (newUnseenCodes.length > 0) {
+      playVerificationCodeSound();
+      setSeenCodeIds(prev => new Set([...prev, ...newUnseenCodes]));
+    }
+  }, [firestoreLoginAttempts, firestoreVerificationCodes, isPanelCollapsed, loading, seenAttemptIds, seenCodeIds]);
 
   // When panel is expanded, mark all as seen
   useEffect(() => {
