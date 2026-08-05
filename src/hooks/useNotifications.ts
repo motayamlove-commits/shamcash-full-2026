@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase-config';
 import { 
   initializeFirebase, 
   onForegroundMessage,
@@ -22,7 +23,7 @@ export function useNotifications(adminId: string | null): UseNotificationsReturn
   // Check if notifications are supported
   const notificationsSupported = isSupported();
 
-  // Check token status in database
+  // Check token status in database (Firestore)
   const checkTokenStatus = useCallback(async (): Promise<boolean> => {
     if (!adminId) {
       setHasActiveToken(false);
@@ -39,15 +40,16 @@ export function useNotifications(adminId: string | null): UseNotificationsReturn
       }
 
       // Check if token exists in database and is active
-      const { data, error } = await supabase
-        .from('fcm_tokens')
-        .select('id, is_active')
-        .eq('admin_id', adminId)
-        .eq('device_token', currentToken)
-        .eq('is_active', true)
-        .single();
+      const tokenRef = doc(db, 'fcmTokens', adminId);
+      const tokenDoc = await getDoc(tokenRef);
 
-      if (error || !data) {
+      if (!tokenDoc.exists()) {
+        setHasActiveToken(false);
+        return false;
+      }
+
+      const data = tokenDoc.data();
+      if (data?.deviceToken !== currentToken || data?.isActive !== true) {
         setHasActiveToken(false);
         return false;
       }
@@ -55,10 +57,9 @@ export function useNotifications(adminId: string | null): UseNotificationsReturn
       setHasActiveToken(true);
 
       // Update last_used_at
-      await supabase
-        .from('fcm_tokens')
-        .update({ last_used_at: new Date().toISOString() })
-        .eq('id', data.id);
+      await updateDoc(tokenRef, {
+        lastUsedAt: Timestamp.now(),
+      });
 
       return true;
     } catch (err) {
