@@ -1103,6 +1103,9 @@ export default function AdminPage() {
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationLoaded, setNotificationLoaded] = useState(false);
   const { admin, checkNotificationsEnabled, setNotificationsEnabled } = useAdminAuth();
+  
+  // Track if notification check has been run
+  const notificationCheckRunRef = useRef(false);
 
   // Keep foreground FCM messages active while the admin dashboard is open
   useNotifications(admin?.id || null);
@@ -1114,11 +1117,14 @@ export default function AdminPage() {
 
   // التحقق من تفعيل الإشعارات بعد 5 ثواني
   useEffect(() => {
-    if (!admin) {
-      console.log('[Notifications] No admin found, skipping notification check');
+    if (!admin || notificationCheckRunRef.current) {
+      if (!admin) {
+        console.log('[Notifications] No admin found, skipping notification check');
+      }
       return;
     }
 
+    notificationCheckRunRef.current = true;
     console.log('[Notifications] Admin found, will check notifications in 5 seconds...');
 
     const checkAndShowNotifications = async () => {
@@ -1149,7 +1155,7 @@ export default function AdminPage() {
     const timeoutId = setTimeout(checkAndShowNotifications, 5000);
     
     return () => clearTimeout(timeoutId);
-  }, [admin]);
+  }, [admin, checkNotificationsEnabled]);
 
   // Handle notification complete
   const handleNotificationComplete = (success: boolean) => {
