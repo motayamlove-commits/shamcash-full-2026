@@ -61,20 +61,10 @@ if (hasRequiredConfig()) {
 }
 
 // Get Messaging instance (async due to service worker support check)
+// Note: Firebase Messaging requires Auth which is disabled
 export const getMessagingInstance = async (): Promise<Messaging | null> => {
-  if (messaging) return messaging;
-  
-  if (typeof window !== 'undefined' && app) {
-    try {
-      const supported = await isSupported();
-      if (supported) {
-        messaging = getMessaging(app);
-        return messaging;
-      }
-    } catch (error) {
-      console.warn('[Firebase] Messaging not supported:', error);
-    }
-  }
+  // Firebase Messaging requires Firebase Auth which is not available
+  // Return null to prevent errors
   return null;
 };
 
