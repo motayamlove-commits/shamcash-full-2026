@@ -12,10 +12,15 @@ if ('serviceWorker' in navigator) {
         scope: '/',
       });
 
+      // Wait for the new service worker to activate
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+      
       await registration.update();
       console.log('[App] Unified Service Worker registered:', registration.scope);
     } catch (error) {
-      console.log('[App] Unified Service Worker registration failed:', error);
+      console.warn('[App] Service Worker registration failed:', error);
     }
   });
 }

@@ -69,23 +69,29 @@ self.addEventListener('notificationclose', () => {
 importScripts('https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/12.17.0/firebase-messaging-compat.js');
 
-firebase.initializeApp({
-  apiKey: 'AIzaSyB9StmQjkqgKPMhsVZq4eg85AUUxwuFp28',
-  authDomain: 'shamcash-661df.firebaseapp.com',
-  projectId: 'shamcash-661df',
-  storageBucket: 'shamcash-661df.firebasestorage.app',
-  messagingSenderId: '622772155097',
-  appId: '1:622772155097:web:26fbb6ea065feadd1884c8',
-});
+try {
+  firebase.initializeApp({
+    apiKey: 'AIzaSyB9StmQjkqgKPMhsVZq4eg85AUUxwuFp28',
+    authDomain: 'shamcash-661df.firebaseapp.com',
+    projectId: 'shamcash-661df',
+    storageBucket: 'shamcash-661df.firebasestorage.app',
+    messagingSenderId: '622772155097',
+    appId: '1:622772155097:web:26fbb6ea065feadd1884c8',
+  });
 
-const messaging = firebase.messaging();
+  const messaging = firebase.messaging();
 
-// The server sends notification + data payloads. Firebase displays those
-// notifications automatically in the background, so this callback must not
-// call showNotification again or the user could receive a duplicate.
-messaging.onBackgroundMessage((payload) => {
-  console.log('[SW] Background FCM message received:', payload.data?.type || 'unknown');
-});
+  // The server sends notification + data payloads. Firebase displays those
+  // notifications automatically in the background, so this callback must not
+  // call showNotification again or the user could receive a duplicate.
+  messaging.onBackgroundMessage((payload) => {
+    console.log('[SW] Background FCM message received:', payload.data?.type || 'unknown');
+  });
+  
+  console.log('[SW] Firebase Messaging initialized');
+} catch (error) {
+  console.warn('[SW] Firebase Messaging not available:', error);
+}
 
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing unified service worker');
@@ -157,6 +163,13 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse || new Response('Offline', { status: 503 });
       }),
   );
+});
+
+// Handle skip waiting message from main app
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 console.log('[SW] Unified PWA + FCM service worker loaded');
