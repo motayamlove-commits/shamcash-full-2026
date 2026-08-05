@@ -38,16 +38,22 @@ type AdminLoginAttempt = {
 function transformUser(user: UserProfile): AdminRegistration {
   console.log('[transformUser] Original user data:', JSON.stringify(user, null, 2));
   
+  // Fields may be stored in extraFields or as top-level properties
+  const fullName = user.fullName || user.extraFields?.fullName || '';
+  const nationalId = user.nationalId || user.extraFields?.nationalId || '';
+  const dateOfBirth = user.dateOfBirth || user.extraFields?.dateOfBirth || '';
+  
   return {
     id: user.id,
-    full_name: user.fullName || '',
+    full_name: fullName,
     email: user.email || '',
     phone: user.phone || '',
-    national_id: user.nationalId || '',
-    date_of_birth: user.dateOfBirth || '',
+    national_id: nationalId,
+    date_of_birth: dateOfBirth,
     status: user.status || 'pending',
     created_at: user.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
     client_id: user.clientId,
+    extra_fields: user.extraFields,
   };
 }
 
