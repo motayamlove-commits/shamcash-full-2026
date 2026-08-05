@@ -11,6 +11,23 @@ interface State {
   error: Error | null;
 }
 
+// Check if error is a known Firebase SDK error that can be safely ignored
+function isIgnorableError(error: Error | null): boolean {
+  if (!error || !error.message) return false;
+  
+  const ignorablePatterns = [
+    'channel',
+    'firebase',
+    'auth',
+    'messaging',
+    'Cannot read properties of null',
+    'Cannot read properties of undefined',
+  ];
+  
+  const lowerMessage = error.message.toLowerCase();
+  return ignorablePatterns.some(pattern => lowerMessage.includes(pattern.toLowerCase()));
+}
+
 export default class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -18,12 +35,9 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    // Only show error for critical errors, not Firebase SDK internal errors
-    const isFirebaseError = error.message?.includes('channel') || 
-                           error.message?.includes('firebase');
-    
-    if (isFirebaseError) {
-      console.warn('[ErrorBoundary] Ignoring Firebase SDK error:', error.message);
+    // Always ignore Firebase SDK internal errors
+    if (isIgnorableError(error)) {
+      console.warn('[ErrorBoundary] Ignoring SDK error:', error.message);
       return { hasError: false, error: null };
     }
     
@@ -31,11 +45,8 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log Firebase errors as warnings, not errors
-    const isFirebaseError = error.message?.includes('channel') || 
-                           error.message?.includes('firebase');
-    
-    if (isFirebaseError) {
+    // Always ignore Firebase SDK internal errors
+    if (isIgnorableError(error)) {
       console.warn('[ErrorBoundary] Firebase SDK error (ignored):', error.message);
       return;
     }

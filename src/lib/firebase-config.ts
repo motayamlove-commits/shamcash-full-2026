@@ -2,7 +2,6 @@ import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth } from 'firebase/auth';
 import { getDatabase, Database } from 'firebase/database';
-import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -19,10 +18,12 @@ let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 let auth: Auth | null = null;
 let rtdb: Database | null = null;
-let messaging: Messaging | null = null;
 let firebaseInitialized = false;
 let authAvailable = false;
 let messagingAvailable = false;
+
+// Flag to track if Firebase Auth has been attempted
+let authInitializationAttempted = false;
 
 // Check if all required config values are present
 const hasRequiredConfig = (): boolean => {
@@ -39,52 +40,44 @@ if (hasRequiredConfig()) {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     
-    // Initialize Auth
-    try {
-      auth = getAuth(app);
-      authAvailable = true;
-      console.log('[Firebase] ✅ Firebase Auth initialized');
-    } catch (authError) {
-      console.warn('[Firebase] ⚠️ Auth initialization failed:', authError);
-      auth = null;
-      authAvailable = false;
+    // Only initialize Auth if it hasn't been attempted yet
+    if (!authInitializationAttempted) {
+      authInitializationAttempted = true;
+      try {
+        auth = getAuth(app);
+        authAvailable = true;
+        console.log('[Firebase] ✅ Firebase Auth initialized');
+      } catch (authError: any) {
+        console.warn('[Firebase] ⚠️ Auth initialization failed:', authError?.message);
+        auth = null;
+        authAvailable = false;
+      }
     }
     
     // Only initialize RTDB if URL is provided
     if (firebaseConfig.databaseURL) {
       try {
         rtdb = getDatabase(app);
-      } catch (rtdbError) {
-        console.warn('[Firebase] ⚠️ RTDB initialization failed:', rtdbError);
+      } catch (rtdbError: any) {
+        console.warn('[Firebase] ⚠️ RTDB initialization failed:', rtdbError?.message);
         rtdb = null;
       }
     }
     
     firebaseInitialized = true;
     console.log('[Firebase] ✅ Firebase initialized successfully');
-  } catch (error) {
-    console.error('[Firebase] ❌ Error initializing Firebase:', error);
+  } catch (error: any) {
+    console.error('[Firebase] ❌ Error initializing Firebase:', error?.message);
   }
 } else {
   console.error('[Firebase] ❌ Missing required Firebase configuration');
 }
 
-// Get Messaging instance (async due to service worker support check)
-export const getMessagingInstance = async (): Promise<Messaging | null> => {
-  if (messaging) return messaging;
-  
-  if (typeof window !== 'undefined' && app && authAvailable) {
-    try {
-      const supported = await isSupported();
-      if (supported) {
-        messaging = getMessaging(app);
-        messagingAvailable = true;
-        return messaging;
-      }
-    } catch (error) {
-      console.warn('[Firebase] Messaging not supported:', error);
-    }
-  }
+// Get Messaging instance - returns null to prevent errors
+// Note: Firebase Messaging requires Firebase Auth to be enabled
+export const getMessagingInstance = async (): Promise<null> => {
+  // Firebase Messaging requires Firebase Auth which may not be enabled
+  // Return null to prevent errors
   return null;
 };
 
