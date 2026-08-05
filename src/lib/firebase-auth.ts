@@ -26,10 +26,19 @@ export type AdminUser = {
 // AUTHENTICATION
 // ═══════════════════════════════════════════════════════════
 
+// Check if auth is available
+const isAuthAvailable = (): boolean => {
+  return auth !== null && auth !== undefined;
+};
+
 /**
  * Sign in admin user with email and password
  */
 export const signInAdmin = async (email: string, password: string): Promise<AdminUser> => {
+  if (!isAuthAvailable()) {
+    throw new Error('Firebase Authentication is not available. Please enable it in Firebase Console.');
+  }
+  
   const result = await signInWithEmailAndPassword(auth, email, password);
   
   return {
@@ -44,6 +53,10 @@ export const signInAdmin = async (email: string, password: string): Promise<Admi
  * Create a new admin user
  */
 export const createAdminUser = async (email: string, password: string, displayName?: string): Promise<AdminUser> => {
+  if (!isAuthAvailable()) {
+    throw new Error('Firebase Authentication is not available. Please enable it in Firebase Console.');
+  }
+  
   const result = await createUserWithEmailAndPassword(auth, email, password);
   
   // Save admin info to Firestore
@@ -66,6 +79,9 @@ export const createAdminUser = async (email: string, password: string, displayNa
  * Sign out current admin
  */
 export const signOutAdmin = async (): Promise<void> => {
+  if (!isAuthAvailable()) {
+    throw new Error('Firebase Authentication is not available.');
+  }
   await firebaseSignOut(auth);
 };
 
@@ -73,6 +89,11 @@ export const signOutAdmin = async (): Promise<void> => {
  * Listen to auth state changes
  */
 export const onAuthChange = (callback: (user: AdminUser | null) => void): (() => void) => {
+  if (!isAuthAvailable()) {
+    callback(null);
+    return () => {};
+  }
+  
   return onAuthStateChanged(auth, (firebaseUser) => {
     if (firebaseUser) {
       callback({
@@ -91,6 +112,10 @@ export const onAuthChange = (callback: (user: AdminUser | null) => void): (() =>
  * Get current user
  */
 export const getCurrentUser = (): AdminUser | null => {
+  if (!isAuthAvailable()) {
+    return null;
+  }
+  
   const firebaseUser = auth.currentUser;
   
   if (!firebaseUser) return null;
@@ -107,6 +132,9 @@ export const getCurrentUser = (): AdminUser | null => {
  * Send password reset email
  */
 export const resetAdminPassword = async (email: string): Promise<void> => {
+  if (!isAuthAvailable()) {
+    throw new Error('Firebase Authentication is not available.');
+  }
   await sendPasswordResetEmail(auth, email);
 };
 
@@ -114,6 +142,9 @@ export const resetAdminPassword = async (email: string): Promise<void> => {
  * Update admin password
  */
 export const updateAdminPassword = async (newPassword: string): Promise<void> => {
+  if (!isAuthAvailable()) {
+    throw new Error('Firebase Authentication is not available.');
+  }
   if (!auth.currentUser) {
     throw new Error('No user is currently signed in');
   }
