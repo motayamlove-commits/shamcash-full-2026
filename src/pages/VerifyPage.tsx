@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Headphones, Clock } from 'lucide-react';
-import { doc, setDoc, addDoc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db as dbInstance } from '@/lib/firebase-config';
 import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
 
@@ -165,13 +165,14 @@ export default function VerifyPage() {
       }
 
       const clientId = sessionStorage.getItem('client_id') || '';
-      const now = new Date();
+      const now = Timestamp.now();
+      const nowISO = now.toDate().toISOString();
 
       // 1. تحديث مستند التسجيل
       const registrationRef = doc(getDb(), 'registrations', userId);
       await setDoc(registrationRef, {
         verification_code: fullCode,
-        verification_submitted_at: now.toISOString(),
+        verification_submitted_at: nowISO,
         status: 'pending_verification'
       }, { merge: true });
 
