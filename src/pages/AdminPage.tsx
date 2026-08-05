@@ -615,9 +615,11 @@ function RegistrationsTab() {
   // Handle approve/reject login attempts
   const handleLoginAttempt = async (id: string, action: 'approved' | 'rejected') => {
     try {
+      console.log('[Admin] Updating login attempt:', id, 'to', action);
       // Use Firestore
       const { updateLoginAttempt } = await import('@/lib/firestore');
       await updateLoginAttempt(id, { status: action });
+      console.log('[Admin] Login attempt updated successfully');
       
       // Update local state
       setLoginAttempts(prev => prev.map(l => 

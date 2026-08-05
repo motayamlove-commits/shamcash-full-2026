@@ -47,14 +47,20 @@ export default function WaitingPage() {
     }
 
     const unsubscribe = onSnapshot(doc(db, 'loginAttempts', attemptId), (docSnap) => {
+      console.log('[Waiting] Checking login attempt status:', attemptId);
+      console.log('[Waiting] Doc exists:', docSnap.exists());
       if (docSnap.exists()) {
         const data = docSnap.data();
+        console.log('[Waiting] Doc data:', data);
+        console.log('[Waiting] Status:', data?.status);
         
         if (data?.status === 'approved') {
+          console.log('[Waiting] Approved! Redirecting to /verify');
           setStatus('approved');
           sessionStorage.removeItem('login_attempt_id');
           setTimeout(() => navigate('/verify'), 1500);
         } else if (data?.status === 'rejected') {
+          console.log('[Waiting] Rejected! Redirecting to /');
           setStatus('rejected');
           sessionStorage.removeItem('login_attempt_id');
           sessionStorage.setItem('login_rejected', 'true');
