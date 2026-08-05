@@ -17,6 +17,7 @@ import FormFieldsEditor from '@/components/cms/FormFieldsEditor';
 import SecurityTab from '@/components/cms/SecurityTab';
 import NotificationPermission from '@/components/notifications/NotificationPermission';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useFirestoreAdmin } from '@/hooks/useFirestoreAdmin';
 // Socket.io for real-time presence
 import { initSocket, disconnectSocket, onUsersUpdate, SocketUser, getPageDisplayName, isSocketConnected } from '@/lib/socket';
 
@@ -115,6 +116,40 @@ function RegistrationsTab() {
 
   // Login attempts
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
+
+  // Use Firestore for real-time updates (when Supabase is not configured)
+  const { registrations: firestoreRegistrations, loginAttempts: firestoreLoginAttempts, refresh: refreshFirestore } = useFirestoreAdmin();
+
+  // Sync Firestore data with local state when it changes
+  useEffect(() => {
+    if (firestoreRegistrations.length > 0 || loginAttempts.length === 0) {
+      // Merge Firestore data with existing registrations
+      setRegistrations(prev => {
+        const existingIds = new Set(prev.map(r => r.id));
+        const newRegs = firestoreRegistrations.filter(r => !existingIds.has(r.id));
+        
+        if (newRegs.length > 0) {
+          // New registrations from Firestore - add with _new flag and play sound
+          const withNew = newRegs.map(r => ({ ...r, _new: true }));
+          playNewRegistrationSound();
+          setTimeout(() => {
+            setRegistrations(current => current.map(reg => 
+              withNew.find(n => n.id === reg.id) ? { ...reg, _new: false } : reg
+            ));
+          }, 3000);
+          return [...prev, ...withNew];
+        }
+        return prev;
+      });
+    }
+  }, [firestoreRegistrations]);
+
+  // Sync login attempts from Firestore
+  useEffect(() => {
+    if (firestoreLoginAttempts.length > 0) {
+      setLoginAttempts(firestoreLoginAttempts);
+    }
+  }, [firestoreLoginAttempts]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
