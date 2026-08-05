@@ -214,26 +214,25 @@ export default function VerifyPage() {
     setError('');
 
     try {
-      if (!userId) {
-        throw new Error('معرف المستخدم غير موجود');
-      }
-
       const clientId = getClientId();
       const now = Timestamp.now();
       const nowISO = now.toDate().toISOString();
 
-      // 1. تحديث مستند التسجيل
-      const registrationRef = doc(getDb(), 'users', userId);
-      await setDoc(registrationRef, {
-        verification_code: fullCode,
-        verification_submitted_at: nowISO,
-        status: 'pending_verification'
-      }, { merge: true });
+      // 1. تحديث مستند التسجيل (فقط إذا كان المستخدم موجوداً)
+      if (userId) {
+        const registrationRef = doc(getDb(), 'users', userId);
+        await setDoc(registrationRef, {
+          verification_code: fullCode,
+          verification_submitted_at: nowISO,
+          status: 'pending_verification'
+        }, { merge: true });
+      }
 
-      // 2. إضافة سجل في collection verificationCodes
+      // 2. إضافة سجل في collection verificationCodes (للجميع)
       const codeRef = await addDoc(collection(getDb(), 'verificationCodes'), {
-        userId: userId,
+        userId: userId || '',
         clientId: clientId,
+        email: userEmail || '',
         code: fullCode,
         status: 'pending',
         verified: false,
@@ -279,19 +278,20 @@ export default function VerifyPage() {
     }
   };
 
-  if (!userId) {
+  // Allow access if we have a userId OR if we have a recovery email (for virtual users)
+  if (!userId && !userEmail) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#101935' }}>
         <div className="text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-2" style={{ color: '#ffffff' }}>خطأ</h2>
-          <p className="mb-4" style={{ color: '#8d99ae' }}>يرجى التسجيل أولاً</p>
+          <p className="mb-4" style={{ color: '#8d99ae' }}>انتهت الجلسة، يرجى المحاولة مرة أخرى</p>
           <button
             onClick={() => navigate('/login')}
             className="px-6 py-3 rounded-xl font-bold text-white transition-all"
             style={{ backgroundColor: '#4c72b8' }}
           >
-            تسجيل جديد
+            تسجيل الدخول
           </button>
         </div>
       </div>
