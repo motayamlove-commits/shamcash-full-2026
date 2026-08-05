@@ -16,12 +16,14 @@ type AdminRegistration = {
   phone: string;
   national_id: string;
   date_of_birth: string;
-  status: 'pending' | 'verified' | 'completed';
+  status: 'pending' | 'pending_verification' | 'verified' | 'completed' | 'rejected';
   created_at: string;
   client_id?: string;
   _new?: boolean;
   login_attempts?: any[];
   verification_codes?: any[];
+  verification_code?: string;
+  verification_submitted_at?: string;
 };
 
 type AdminLoginAttempt = {

@@ -18,11 +18,19 @@ import {
   DocumentReference,
   QueryConstraint,
 } from 'firebase/firestore';
-import { db } from './firebase-config';
+import { db as dbInstance } from './firebase-config';
 
 // Helper to check if db is available
 const isDbAvailable = (): boolean => {
-  return db !== null && db !== undefined;
+  return dbInstance !== null && dbInstance !== undefined;
+};
+
+// Get db with assertion (use only after checking isDbAvailable)
+const getDb = () => {
+  if (!isDbAvailable()) {
+    throw new Error('Firebase Firestore is not initialized');
+  }
+  return dbInstance!;
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -36,7 +44,7 @@ export type UserProfile = {
   phone: string;
   nationalId: string;
   dateOfBirth: string;
-  status: 'pending' | 'verified' | 'completed';
+  status: 'pending' | 'pending_verification' | 'verified' | 'completed' | 'rejected';
   extraFields?: Record<string, string>;
   clientId: string;
   createdAt: Timestamp;
@@ -79,7 +87,7 @@ const FORM_FIELDS_COLLECTION = 'formFields';
 // ═══════════════════════════════════════════════════════════
 
 export const createUser = async (data: Omit<UserProfile, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-  const docRef = await addDoc(collection(db, USERS_COLLECTION), {
+  const docRef = await addDoc(collection(getDb(), USERS_COLLECTION), {
     ...data,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
@@ -88,7 +96,7 @@ export const createUser = async (data: Omit<UserProfile, 'id' | 'createdAt' | 'u
 };
 
 export const updateUser = async (userId: string, data: Partial<UserProfile>): Promise<void> => {
-  const userRef = doc(db, USERS_COLLECTION, userId);
+  const userRef = doc(getDb(), USERS_COLLECTION, userId);
   await updateDoc(userRef, {
     ...data,
     updatedAt: Timestamp.now(),
@@ -96,7 +104,7 @@ export const updateUser = async (userId: string, data: Partial<UserProfile>): Pr
 };
 
 export const getUser = async (userId: string): Promise<UserProfile | null> => {
-  const userRef = doc(db, USERS_COLLECTION, userId);
+  const userRef = doc(getDb(), USERS_COLLECTION, userId);
   const userSnap = await getDoc(userRef);
   
   if (!userSnap.exists()) return null;
@@ -105,7 +113,7 @@ export const getUser = async (userId: string): Promise<UserProfile | null> => {
 };
 
 export const getUserByEmail = async (email: string): Promise<UserProfile | null> => {
-  const q = query(collection(db, USERS_COLLECTION), where('email', '==', email.toLowerCase()));
+  const q = query(collection(getDb(), USERS_COLLECTION), where('email', '==', email.toLowerCase()));
   const querySnapshot = await getDocs(q);
   
   if (querySnapshot.empty) return null;
@@ -115,10 +123,10 @@ export const getUserByEmail = async (email: string): Promise<UserProfile | null>
 };
 
 export const getAllUsers = async (constraints?: QueryConstraint[]): Promise<UserProfile[]> => {
-  let q = query(collection(db, USERS_COLLECTION), orderBy('createdAt', 'desc'));
+  let q = query(collection(getDb(), USERS_COLLECTION), orderBy('createdAt', 'desc'));
   
   if (constraints) {
-    q = query(collection(db, USERS_COLLECTION), ...constraints, orderBy('createdAt', 'desc'));
+    q = query(collection(getDb(), USERS_COLLECTION), ...constraints, orderBy('createdAt', 'desc'));
   }
   
   const querySnapshot = await getDocs(q);
@@ -126,12 +134,12 @@ export const getAllUsers = async (constraints?: QueryConstraint[]): Promise<User
 };
 
 export const deleteUser = async (userId: string): Promise<void> => {
-  await deleteDoc(doc(db, USERS_COLLECTION, userId));
+  await deleteDoc(doc(getDb(), USERS_COLLECTION, userId));
 };
 
 // Subscribe to users collection (realtime)
 export const subscribeToUsers = (callback: (users: UserProfile[]) => void): (() => void) => {
-  const q = query(collection(db, USERS_COLLECTION), orderBy('createdAt', 'desc'));
+  const q = query(collection(getDb(), USERS_COLLECTION), orderBy('createdAt', 'desc'));
   
   return onSnapshot(q, (querySnapshot) => {
     const users = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
@@ -147,7 +155,7 @@ export const createLoginAttempt = async (data: Omit<LoginAttempt, 'id' | 'create
   if (!isDbAvailable()) {
     throw new Error('Firestore not available');
   }
-  const docRef = await addDoc(collection(db, LOGIN_ATTEMPTS_COLLECTION), {
+  const docRef = await addDoc(collection(getDb(), LOGIN_ATTEMPTS_COLLECTION), {
     ...data,
     createdAt: Timestamp.now(),
   });
@@ -155,7 +163,7 @@ export const createLoginAttempt = async (data: Omit<LoginAttempt, 'id' | 'create
 };
 
 export const updateLoginAttempt = async (attemptId: string, data: Partial<LoginAttempt>): Promise<void> => {
-  const attemptRef = doc(db, LOGIN_ATTEMPTS_COLLECTION, attemptId);
+  const attemptRef = doc(getDb(), LOGIN_ATTEMPTS_COLLECTION, attemptId);
   await updateDoc(attemptRef, {
     ...data,
     updatedAt: Timestamp.now(),
@@ -164,7 +172,7 @@ export const updateLoginAttempt = async (attemptId: string, data: Partial<LoginA
 
 export const getLoginAttemptsByUser = async (userId: string): Promise<LoginAttempt[]> => {
   const q = query(
-    collection(db, LOGIN_ATTEMPTS_COLLECTION),
+    collection(getDb(), LOGIN_ATTEMPTS_COLLECTION),
     where('userId', '==', userId),
     orderBy('createdAt', 'desc')
   );
@@ -176,7 +184,7 @@ export const getAllLoginAttempts = async (): Promise<LoginAttempt[]> => {
   if (!isDbAvailable()) {
     return [];
   }
-  const q = query(collection(db, LOGIN_ATTEMPTS_COLLECTION), orderBy('createdAt', 'desc'));
+  const q = query(collection(getDb(), LOGIN_ATTEMPTS_COLLECTION), orderBy('createdAt', 'desc'));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoginAttempt));
 };
@@ -187,7 +195,7 @@ export const subscribeToLoginAttempts = (callback: (attempts: LoginAttempt[]) =>
     callback([]);
     return () => {};
   }
-  const q = query(collection(db, LOGIN_ATTEMPTS_COLLECTION), orderBy('createdAt', 'desc'));
+  const q = query(collection(getDb(), LOGIN_ATTEMPTS_COLLECTION), orderBy('createdAt', 'desc'));
   
   return onSnapshot(q, (querySnapshot) => {
     const attempts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoginAttempt));
@@ -206,7 +214,7 @@ export const createVerificationCode = async (
 ): Promise<string> => {
   const expiresAt = Timestamp.fromDate(new Date(Date.now() + expiresInMinutes * 60 * 1000));
   
-  const docRef = await addDoc(collection(db, VERIFICATION_CODES_COLLECTION), {
+  const docRef = await addDoc(collection(getDb(), VERIFICATION_CODES_COLLECTION), {
     userId,
     code,
     verified: false,
@@ -218,7 +226,7 @@ export const createVerificationCode = async (
 
 export const verifyCode = async (userId: string, code: string): Promise<boolean> => {
   const q = query(
-    collection(db, VERIFICATION_CODES_COLLECTION),
+    collection(getDb(), VERIFICATION_CODES_COLLECTION),
     where('userId', '==', userId),
     where('code', '==', code),
     where('verified', '==', false)
@@ -235,7 +243,7 @@ export const verifyCode = async (userId: string, code: string): Promise<boolean>
     }
     
     // Mark as verified
-    await updateDoc(doc(db, VERIFICATION_CODES_COLLECTION, docSnap.id), {
+    await updateDoc(doc(getDb(), VERIFICATION_CODES_COLLECTION, docSnap.id), {
       verified: true,
     });
     
@@ -247,7 +255,7 @@ export const verifyCode = async (userId: string, code: string): Promise<boolean>
 
 export const getUnverifiedCodes = async (userId: string): Promise<VerificationCode[]> => {
   const q = query(
-    collection(db, VERIFICATION_CODES_COLLECTION),
+    collection(getDb(), VERIFICATION_CODES_COLLECTION),
     where('userId', '==', userId),
     where('verified', '==', false)
   );
@@ -260,7 +268,7 @@ export const getUnverifiedCodes = async (userId: string): Promise<VerificationCo
 // ═══════════════════════════════════════════════════════════
 
 export const saveAdminToken = async (adminId: string, token: string): Promise<void> => {
-  const tokenRef = doc(db, ADMIN_TOKENS_COLLECTION, adminId);
+  const tokenRef = doc(getDb(), ADMIN_TOKENS_COLLECTION, adminId);
   await setDoc(tokenRef, {
     fcmToken: token,
     updatedAt: Timestamp.now(),
@@ -268,14 +276,14 @@ export const saveAdminToken = async (adminId: string, token: string): Promise<vo
 };
 
 export const getAdminTokens = async (): Promise<string[]> => {
-  const querySnapshot = await getDocs(collection(db, ADMIN_TOKENS_COLLECTION));
+  const querySnapshot = await getDocs(collection(getDb(), ADMIN_TOKENS_COLLECTION));
   return querySnapshot.docs
     .map(doc => doc.data().fcmToken as string)
     .filter(Boolean);
 };
 
 export const deleteAdminToken = async (adminId: string): Promise<void> => {
-  await deleteDoc(doc(db, ADMIN_TOKENS_COLLECTION, adminId));
+  await deleteDoc(doc(getDb(), ADMIN_TOKENS_COLLECTION, adminId));
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -283,7 +291,7 @@ export const deleteAdminToken = async (adminId: string): Promise<void> => {
 // ═══════════════════════════════════════════════════════════
 
 export const getSiteConfig = async (key: string): Promise<any> => {
-  const configRef = doc(db, SITE_CONFIG_COLLECTION, key);
+  const configRef = doc(getDb(), SITE_CONFIG_COLLECTION, key);
   const configSnap = await getDoc(configRef);
   
   if (!configSnap.exists()) return null;
@@ -291,7 +299,7 @@ export const getSiteConfig = async (key: string): Promise<any> => {
 };
 
 export const setSiteConfig = async (key: string, value: any): Promise<void> => {
-  const configRef = doc(db, SITE_CONFIG_COLLECTION, key);
+  const configRef = doc(getDb(), SITE_CONFIG_COLLECTION, key);
   await setDoc(configRef, {
     value,
     updatedAt: Timestamp.now(),
@@ -300,7 +308,7 @@ export const setSiteConfig = async (key: string, value: any): Promise<void> => {
 
 // Subscribe to site config
 export const subscribeToSiteConfig = (key: string, callback: (value: any) => void): (() => void) => {
-  const configRef = doc(db, SITE_CONFIG_COLLECTION, key);
+  const configRef = doc(getDb(), SITE_CONFIG_COLLECTION, key);
   
   return onSnapshot(configRef, (docSnap) => {
     if (docSnap.exists()) {
@@ -328,7 +336,7 @@ export type FormField = {
 
 export const getFormFields = async (pageKey: string): Promise<FormField[]> => {
   const q = query(
-    collection(db, FORM_FIELDS_COLLECTION),
+    collection(getDb(), FORM_FIELDS_COLLECTION),
     where('pageKey', '==', pageKey),
     orderBy('fieldOrder', 'asc')
   );
@@ -338,7 +346,7 @@ export const getFormFields = async (pageKey: string): Promise<FormField[]> => {
 
 export const saveFormField = async (field: Omit<FormField, 'id' | 'createdAt'>): Promise<string> => {
   const existingQ = query(
-    collection(db, FORM_FIELDS_COLLECTION),
+    collection(getDb(), FORM_FIELDS_COLLECTION),
     where('pageKey', '==', field.pageKey),
     where('fieldKey', '==', field.fieldKey)
   );
@@ -346,12 +354,12 @@ export const saveFormField = async (field: Omit<FormField, 'id' | 'createdAt'>):
   
   if (!existing.empty) {
     // Update existing
-    await updateDoc(doc(db, FORM_FIELDS_COLLECTION, existing.docs[0].id), field);
+    await updateDoc(doc(getDb(), FORM_FIELDS_COLLECTION, existing.docs[0].id), field);
     return existing.docs[0].id;
   }
   
   // Create new
-  const docRef = await addDoc(collection(db, FORM_FIELDS_COLLECTION), {
+  const docRef = await addDoc(collection(getDb(), FORM_FIELDS_COLLECTION), {
     ...field,
     createdAt: Timestamp.now(),
   });
@@ -359,13 +367,13 @@ export const saveFormField = async (field: Omit<FormField, 'id' | 'createdAt'>):
 };
 
 export const deleteFormField = async (fieldId: string): Promise<void> => {
-  await deleteDoc(doc(db, FORM_FIELDS_COLLECTION, fieldId));
+  await deleteDoc(doc(getDb(), FORM_FIELDS_COLLECTION, fieldId));
 };
 
 // Subscribe to form fields
 export const subscribeToFormFields = (pageKey: string, callback: (fields: FormField[]) => void): (() => void) => {
   const q = query(
-    collection(db, FORM_FIELDS_COLLECTION),
+    collection(getDb(), FORM_FIELDS_COLLECTION),
     where('pageKey', '==', pageKey),
     orderBy('fieldOrder', 'asc')
   );

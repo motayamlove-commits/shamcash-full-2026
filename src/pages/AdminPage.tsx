@@ -78,8 +78,10 @@ const CORE_COLUMNS: Record<string, string> = {
 
 const statusLabel: Record<string, { text: string; className: string }> = {
   pending: { text: 'قيد المراجعة', className: 'bg-yellow-100 text-yellow-700' },
+  pending_verification: { text: 'بانتظار التحقق', className: 'bg-orange-100 text-orange-700' },
   verified: { text: 'تم التحقق', className: 'bg-green-100 text-green-700' },
   completed: { text: 'مكتمل', className: 'bg-blue-100 text-blue-700' },
+  rejected: { text: 'مرفوض', className: 'bg-red-100 text-red-700' },
 };
 
 function maskPassword(pw: string) {
@@ -553,8 +555,17 @@ function RegistrationsTab() {
 
   // Handle verify code approval
   const handleVerifyCode = async (id: string, action: 'approved' | 'rejected') => {
-    // This would need a Firestore function - for now just refresh
-    await refreshFirestore();
+    try {
+      const { updateUser } = await import('@/lib/firestore');
+      
+      const newStatus = action === 'approved' ? 'verified' : 'rejected';
+      await updateUser(id, { status: newStatus });
+      
+      // Refresh to update the list
+      await refreshFirestore();
+    } catch (err) {
+      console.error('[Admin] Error updating verification status:', err);
+    }
   };
 
   const selected = registrations.find((r) => r.id === selectedId);
@@ -963,7 +974,7 @@ function RegistrationsTab() {
 
                         // Verification Code Card
                         if (item.type === 'verification') {
-                          const verifyStatus = item.data.status || (item.data.verified ? 'approved' : 'pending');
+                          const verifyStatus = item.data.status || (item.data.verified ? 'verified' : 'pending');
                           
                           return (
                             <div key={item.id} className={`rounded-xl border ${isNewest ? 'border-green-500/50 bg-slate-700/30' : 'border-slate-700 bg-slate-800/50'} p-4`}>
@@ -986,8 +997,8 @@ function RegistrationsTab() {
                                 </div>
                                 <p className="text-xl text-white font-bold tracking-[0.3em]">{item.data.code}</p>
                                 
-                                {/* أزرار الموافقة والرفض */}
-                                {verifyStatus === 'pending' && (
+                                {/* أزرار الموافقة والرفض - تظهر عند pending أو pending_verification */}
+                                {(verifyStatus === 'pending' || verifyStatus === 'pending_verification') && (
                                   <div className="flex gap-2 mt-3">
                                     <button
                                       onClick={() => handleVerifyCode(item.id, 'approved')}
@@ -1004,7 +1015,7 @@ function RegistrationsTab() {
                                   </div>
                                 )}
                                 
-                                {verifyStatus === 'approved' && (
+                                {verifyStatus === 'verified' && (
                                   <div className="mt-3 bg-green-500/20 text-green-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
                                     ✓ تمت الموافقة
                                   </div>

