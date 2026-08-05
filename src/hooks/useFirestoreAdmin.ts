@@ -10,6 +10,7 @@ import {
   LoginAttempt,
   VerificationCode,
   Timestamp,
+  isDbAvailable,
 } from '@/lib/firestore';
 
 // Transform Firestore data to match AdminPage format
@@ -159,7 +160,10 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     let unsubLogins: (() => void) | null = null;
     let unsubCodes: (() => void) | null = null;
 
+    console.log('[useFirestoreAdmin] Component mounted, checking Firebase:', isDbAvailable());
+
     const init = async () => {
+      console.log('[useFirestoreAdmin] init() called');
       // Initial fetch
       await refresh();
 

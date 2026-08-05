@@ -24,7 +24,7 @@ export { Timestamp };
 import { db as dbInstance } from './firebase-config';
 
 // Helper to check if db is available
-const isDbAvailable = (): boolean => {
+export const isDbAvailable = (): boolean => {
   return dbInstance !== null && dbInstance !== undefined;
 };
 
