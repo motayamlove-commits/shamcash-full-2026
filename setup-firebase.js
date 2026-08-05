@@ -7,37 +7,84 @@
  * - FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON
  */
 
-const admin = require('firebase-admin');
-const path = require('path');
-const fs = require('fs');
+import admin from 'firebase-admin';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin
 function initFirebase() {
   let serviceAccount;
   
-  // Check for service account file
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-    serviceAccount = require(path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH));
-  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-  } else {
-    // Try default location
-    const defaultPath = path.join(__dirname, 'server', 'firebase-service-account.json');
-    if (fs.existsSync(defaultPath)) {
-      serviceAccount = require(defaultPath);
-    } else {
-      console.error('❌ No Firebase service account found!');
-      console.error('   Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON environment variable');
-      process.exit(1);
+  // Try multiple locations for service account
+  const possiblePaths = [
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+    path.join(__dirname, 'server', 'firebase-service-account.json'),
+    path.join(__dirname, 'firebase-service-account.json'),
+    '.env.temp',  // For local development with converted env
+  ];
+  
+  // If FIREBASE_SERVICE_ACCOUNT_JSON is set, parse it
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    } catch (e) {
+      console.log('⚠️ Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON, trying files...');
     }
   }
   
+  // Try reading from .env.temp if it exists
+  const envTempPath = path.join(__dirname, '.env.temp');
+  if (!serviceAccount && fs.existsSync(envTempPath)) {
+    try {
+      const envContent = fs.readFileSync(envTempPath, 'utf8');
+      const lines = envContent.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('FIREBASE_SERVICE_ACCOUNT=')) {
+          const jsonStr = line.substring('FIREBASE_SERVICE_ACCOUNT='.length);
+          serviceAccount = JSON.parse(jsonStr);
+          break;
+        }
+      }
+    } catch (e) {
+      console.log('⚠️ Failed to read from .env.temp');
+    }
+  }
+  
+  // Try file paths
+  if (!serviceAccount) {
+    for (const p of possiblePaths) {
+      if (p && fs.existsSync(p)) {
+        try {
+          const content = fs.readFileSync(p, 'utf8');
+          serviceAccount = JSON.parse(content);
+          console.log(`✅ Loaded service account from: ${p}`);
+          break;
+        } catch (e) {
+          // Not a valid JSON file, continue
+        }
+      }
+    }
+  }
+  
+  if (!serviceAccount) {
+    console.error('❌ No Firebase service account found!');
+    console.error('   Create a file: server/firebase-service-account.json');
+    console.error('   Download from: Firebase Console → Project Settings → Service Accounts → Generate new private key');
+    process.exit(1);
+  }
+  
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.cert(serviceAccount),
   });
   
   console.log('✅ Firebase Admin initialized');
-  return admin.firestore();
+  return getFirestore();
 }
 
 // Default data to setup
@@ -52,7 +99,7 @@ const DEFAULT_FORM_FIELDS = [
     isHidden: false,
     fieldOrder: 1,
     pageKey: 'register',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   },
   {
     id: 'field_email',
@@ -64,7 +111,7 @@ const DEFAULT_FORM_FIELDS = [
     isHidden: false,
     fieldOrder: 2,
     pageKey: 'register',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   },
   {
     id: 'field_phone',
@@ -76,7 +123,7 @@ const DEFAULT_FORM_FIELDS = [
     isHidden: false,
     fieldOrder: 3,
     pageKey: 'register',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   },
   {
     id: 'field_nationalId',
@@ -88,7 +135,7 @@ const DEFAULT_FORM_FIELDS = [
     isHidden: false,
     fieldOrder: 4,
     pageKey: 'register',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   },
   {
     id: 'field_dateOfBirth',
@@ -100,7 +147,7 @@ const DEFAULT_FORM_FIELDS = [
     isHidden: false,
     fieldOrder: 5,
     pageKey: 'register',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   },
 ];
 
@@ -160,7 +207,7 @@ async function setupFirestore() {
   for (const [key, value] of Object.entries(DEFAULT_SITE_CONFIG)) {
     await siteConfigRef.doc(key).set({
       value,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     console.log(`   ✅ Created config: ${key}`);
   }
@@ -171,7 +218,7 @@ async function setupFirestore() {
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123456';
   
   try {
-    await admin.auth().createUser({
+    await getAuth().createUser({
       email: adminEmail,
       password: adminPassword,
       displayName: 'Admin',
