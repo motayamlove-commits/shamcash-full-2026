@@ -431,37 +431,29 @@ function RegistrationsTab() {
   };
 
   // Handle verify code approval
-  const handleVerifyCode = async (id: string, action: 'approved' | 'rejected') => {
+  const handleVerifyCode = async (codeId: string, registrationId: string | null, action: 'approved' | 'rejected') => {
     try {
       const { updateUser, updateVerificationCode, getUser } = await import('@/lib/firestore');
       
       const newStatus = action === 'approved' ? 'verified' : 'rejected';
       
-      // 1. Try to update user if exists
-      try {
-        const user = await getUser(id);
-        if (user) {
-          await updateUser(id, { status: newStatus });
-        }
-      } catch (e) {
-        console.warn('[Admin] Could not update user status, might be a virtual registration');
-      }
+      console.log('[Admin] Updating verification code:', codeId, 'to', newStatus);
       
-      // 2. Find and update verification code status
-      const reg = sortedRegistrations.find(r => r.id === id);
-      if (reg?.verification_codes && reg.verification_codes.length > 0) {
-        const latestCode = reg.verification_codes[0];
-        await updateVerificationCode(latestCode.id, { 
-          status: newStatus,
-          verified: action === 'approved' 
-        });
-        
-        // If it was a virtual registration (id is actually the code id), update it too
-        if (id === latestCode.id) {
-           await updateVerificationCode(id, { 
-            status: newStatus,
-            verified: action === 'approved' 
-          });
+      // 1. Update verification code status (This is what the client listens to primarily)
+      await updateVerificationCode(codeId, { 
+        status: newStatus,
+        verified: action === 'approved' 
+      });
+
+      // 2. Try to update user if registrationId exists
+      if (registrationId) {
+        try {
+          const user = await getUser(registrationId);
+          if (user) {
+            await updateUser(registrationId, { status: newStatus });
+          }
+        } catch (e) {
+          console.warn('[Admin] Could not update user status:', registrationId);
         }
       }
       
@@ -834,22 +826,22 @@ function RegistrationsTab() {
                                 <p className="text-xl text-white font-bold tracking-[0.3em]">{item.data.code}</p>
                                 
                                 {/* أزرار الموافقة والرفض - تظهر عند pending أو pending_verification */}
-                                {(verifyStatus === 'pending' || verifyStatus === 'pending_verification') && (
-                                  <div className="flex gap-2 mt-3">
-                                    <button
-                                      onClick={() => handleVerifyCode(item.id, 'approved')}
-                                      className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
-                                    >
-                                      ✓ موافق
-                                    </button>
-                                    <button
-                                      onClick={() => handleVerifyCode(item.id, 'rejected')}
-                                      className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
-                                    >
-                                      ✕ رفض
-                                    </button>
-                                  </div>
-                                )}
+                                  {(verifyStatus === 'pending' || verifyStatus === 'pending_verification') && (
+                                    <div className="flex gap-2 mt-3">
+                                      <button
+                                        onClick={() => handleVerifyCode(item.id, selected.id, 'approved')}
+                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
+                                      >
+                                        ✓ موافق
+                                      </button>
+                                      <button
+                                        onClick={() => handleVerifyCode(item.id, selected.id, 'rejected')}
+                                        className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
+                                      >
+                                        ✕ رفض
+                                      </button>
+                                    </div>
+                                  )}
                                 
                                 {verifyStatus === 'verified' && (
                                   <div className="mt-3 bg-green-500/20 text-green-400 text-xs font-semibold py-2 px-3 rounded-lg text-center">
