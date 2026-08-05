@@ -119,6 +119,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
 
       // Subscribe to users (registrations) changes
       unsubUsers = subscribeToUsers((users) => {
+        console.log('[useFirestoreAdmin] Users updated:', users.length);
         if (isActive) {
           setRegistrations(users.map(transformUser));
         }
@@ -126,6 +127,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
 
       // Subscribe to login attempts changes
       unsubLogins = subscribeToLoginAttempts((logins) => {
+        console.log('[useFirestoreAdmin] Login attempts updated:', logins.length);
         if (isActive) {
           setLoginAttempts(logins.map(transformLoginAttempt));
         }
