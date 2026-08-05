@@ -6,7 +6,7 @@ const SOUNDS = {
   newRegistration: 'https://assets.mixkit.co/active_storage/sfx/866/866-preview.mp3',
   loginAttempt: 'https://assets.mixkit.co/active_storage/sfx/253/253-preview.mp3',
   verificationCode: 'https://assets.mixkit.co/active_storage/sfx/217/217-preview.mp3',
-  passwordReset: 'https://assets.mixkit.co/active_storage/sfx/253/253-preview.mp3',
+  passwordReset: 'https://assets.mixkit.co/active_storage/sfx/217/217-preview.mp3',
 };
 
 // كائنات الصوت
