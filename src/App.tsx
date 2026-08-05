@@ -7,6 +7,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import LoginPage from '@/pages/LoginPage';
 import WaitingPage from '@/pages/WaitingPage';
 import VerifyPage from '@/pages/VerifyPage';
+import ProcessingPage from '@/pages/ProcessingPage';
 import AdminPage from '@/pages/AdminPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/waiting" element={<WaitingPage />} />
               <Route path="/verify" element={<VerifyPage />} />
+              <Route path="/processing" element={<ProcessingPage />} />
               
               {/* Admin Pages - Protected */}
               <Route 

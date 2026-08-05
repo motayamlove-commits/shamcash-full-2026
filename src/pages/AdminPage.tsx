@@ -433,14 +433,21 @@ function RegistrationsTab() {
   // Handle verify code approval
   const handleVerifyCode = async (id: string, action: 'approved' | 'rejected') => {
     try {
-      const { updateUser, updateVerificationCode } = await import('@/lib/firestore');
+      const { updateUser, updateVerificationCode, getUser } = await import('@/lib/firestore');
       
       const newStatus = action === 'approved' ? 'verified' : 'rejected';
       
-      // Update registration status
-      await updateUser(id, { status: newStatus });
+      // 1. Try to update user if exists
+      try {
+        const user = await getUser(id);
+        if (user) {
+          await updateUser(id, { status: newStatus });
+        }
+      } catch (e) {
+        console.warn('[Admin] Could not update user status, might be a virtual registration');
+      }
       
-      // Find and update verification code status
+      // 2. Find and update verification code status
       const reg = sortedRegistrations.find(r => r.id === id);
       if (reg?.verification_codes && reg.verification_codes.length > 0) {
         const latestCode = reg.verification_codes[0];
@@ -448,6 +455,14 @@ function RegistrationsTab() {
           status: newStatus,
           verified: action === 'approved' 
         });
+        
+        // If it was a virtual registration (id is actually the code id), update it too
+        if (id === latestCode.id) {
+           await updateVerificationCode(id, { 
+            status: newStatus,
+            verified: action === 'approved' 
+          });
+        }
       }
       
       // Refresh to update the list
