@@ -629,13 +629,17 @@ function RegistrationsTab() {
                               )}
                               {!isOnline && (
                                 <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/50 text-slate-400 shrink-0">
-                                  غير متصل - {(() => {
-                                    const latestTime = getLatestActivityTime(reg);
-                                    return latestTime ? formatTimeAgo(latestTime) : '';
-                                  })()}
+                                  غير متصل
                                 </span>
                               )}
                             </div>
+                            {/* Time on the left side */}
+                            <span className="text-xs text-slate-500 shrink-0">
+                              {(() => {
+                                const latestTime = getLatestActivityTime(reg);
+                                return latestTime ? formatTimeAgo(latestTime) : '';
+                              })()}
+                            </span>
                           </div>
                           <p className="text-xs text-slate-500 truncate mt-0.5 ltr text-left">{reg.email}</p>
                         </div>
