@@ -8,7 +8,7 @@ import {
 import { useSiteConfig, FormField } from '@/context/SiteConfigContext';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { fetchActivePresence, getPageName, PresenceUser } from '@/lib/presence';
-import { initSounds, playNewRegistrationSound, playLoginAttemptSound, playVerificationCodeSound, toggleSound, getSoundEnabled } from '@/lib/notifications';
+import { initSounds, playNewRegistrationSound, playLoginAttemptSound, playVerificationCodeSound, playPasswordResetSound, toggleSound, getSoundEnabled } from '@/lib/notifications';
 import { formatTimeAgo } from '@/lib/timeUtils';
 import HeaderFooterEditor from '@/components/cms/HeaderFooterEditor';
 import PageContentEditor from '@/components/cms/PageContentEditor';
@@ -159,6 +159,7 @@ function RegistrationsTab() {
   const [newAttemptsCount, setNewAttemptsCount] = useState(0);
   const [seenAttemptIds, setSeenAttemptIds] = useState<Set<string>>(new Set());
   const [seenCodeIds, setSeenCodeIds] = useState<Set<string>>(new Set());
+  const [seenResetIds, setSeenResetIds] = useState<Set<string>>(new Set());
 
   // Current time state for time-ago updates (refreshes every minute)
   const [currentTime, setCurrentTime] = useState(new Date());

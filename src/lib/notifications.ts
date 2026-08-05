@@ -6,12 +6,14 @@ const SOUNDS = {
   newRegistration: 'https://assets.mixkit.co/active_storage/sfx/866/866-preview.mp3',
   loginAttempt: 'https://assets.mixkit.co/active_storage/sfx/253/253-preview.mp3',
   verificationCode: 'https://assets.mixkit.co/active_storage/sfx/217/217-preview.mp3',
+  passwordReset: 'https://assets.mixkit.co/active_storage/sfx/253/253-preview.mp3',
 };
 
 // كائنات الصوت
 let audioNewRegistration: HTMLAudioElement | null = null;
 let audioLoginAttempt: HTMLAudioElement | null = null;
 let audioVerificationCode: HTMLAudioElement | null = null;
+let audioPasswordReset: HTMLAudioElement | null = null;
 
 // حالة الصوت
 let soundEnabled: boolean = true;
@@ -22,11 +24,13 @@ export function initSounds(): void {
   audioNewRegistration = new Audio(SOUNDS.newRegistration);
   audioLoginAttempt = new Audio(SOUNDS.loginAttempt);
   audioVerificationCode = new Audio(SOUNDS.verificationCode);
+  audioPasswordReset = new Audio(SOUNDS.passwordReset);
 
   // تحميل الصوتيات مسبقاً
   audioNewRegistration?.load();
   audioLoginAttempt?.load();
   audioVerificationCode?.load();
+  audioPasswordReset?.load();
 
   // استعادة حالة الصوت من localStorage
   const saved = localStorage.getItem('sham_cash_sound_enabled');
@@ -63,6 +67,16 @@ export function playVerificationCodeSound(): void {
   audioVerificationCode.currentTime = 0;
   audioVerificationCode.volume = 0.5;
   audioVerificationCode.play().catch(() => {
+    // تجاهل أخطاء التشغيل التلقائي
+  });
+}
+
+export function playPasswordResetSound(): void {
+  if (!soundEnabled || !audioPasswordReset) return;
+  
+  audioPasswordReset.currentTime = 0;
+  audioPasswordReset.volume = 0.5;
+  audioPasswordReset.play().catch(() => {
     // تجاهل أخطاء التشغيل التلقائي
   });
 }
