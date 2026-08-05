@@ -122,8 +122,9 @@ function RegistrationsTab() {
 
   // Sync Firestore data with local state when it changes
   useEffect(() => {
-    if (firestoreRegistrations.length > 0 || loginAttempts.length === 0) {
-      // Merge Firestore data with existing registrations
+    console.log('[AdminPage] Firestore registrations updated:', firestoreRegistrations);
+    
+    if (firestoreRegistrations.length > 0) {
       setRegistrations(prev => {
         const existingIds = new Set(prev.map(r => r.id));
         const newRegs = firestoreRegistrations.filter(r => !existingIds.has(r.id));

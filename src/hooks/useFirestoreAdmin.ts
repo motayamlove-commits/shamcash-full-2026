@@ -36,6 +36,8 @@ type AdminLoginAttempt = {
 };
 
 function transformUser(user: UserProfile): AdminRegistration {
+  console.log('[transformUser] Original user data:', JSON.stringify(user, null, 2));
+  
   return {
     id: user.id,
     full_name: user.fullName || '',
