@@ -175,17 +175,18 @@ export default function VerifyPage() {
         status: 'pending_verification'
       }, { merge: true });
 
-      // 2. إضافة سجل في collection verification_codes
-      await addDoc(collection(getDb(), 'verification_codes'), {
-        registration_id: userId,
-        client_id: clientId,
+      // 2. إضافة سجل في collection verificationCodes
+      await addDoc(collection(getDb(), 'verificationCodes'), {
+        userId: userId,
+        clientId: clientId,
         code: fullCode,
         status: 'pending',
         verified: false,
-        created_at: now.toISOString()
+        createdAt: now,
+        updatedAt: now
       });
 
-      console.log('[Verify] Code submitted and logged to verification_codes');
+      console.log('[Verify] Code submitted and logged to verificationCodes');
 
       // الانتقال لصفحة الانتظار
       setSubmitted(true);
