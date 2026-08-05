@@ -6,17 +6,24 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Dummy query builder for when Supabase is not configured
+const createDummyQueryBuilder = () => ({
+  select: () => createDummyQueryBuilder(),
+  insert: () => Promise.resolve({ data: null, error: null }),
+  update: () => createDummyQueryBuilder(),
+  delete: () => createDummyQueryBuilder(),
+  eq: () => createDummyQueryBuilder(),
+  order: () => createDummyQueryBuilder(),
+  single: () => Promise.resolve({ data: null, error: null }),
+});
+
 // Dummy client for when Supabase is not configured
 const dummyClient = {
-  from: () => ({
-    select: () => ({ data: [], error: new Error('Supabase not configured') }),
-    insert: () => ({ error: new Error('Supabase not configured') }),
-    update: () => ({ eq: () => ({ error: new Error('Supabase not configured') }) }),
-    delete: () => ({ eq: () => ({ error: new Error('Supabase not configured') }) }),
-  }),
+  from: () => createDummyQueryBuilder(),
   channel: () => ({
     on: () => dummyClient.channel(''),
     subscribe: () => dummyClient.channel(''),
+    unsubscribe: () => {},
   }),
   removeChannel: () => {},
 } as unknown as SupabaseClient;

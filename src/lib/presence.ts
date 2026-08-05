@@ -14,7 +14,12 @@ const TTL = 30000; // 30 seconds TTL
 
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let currentPage: string = '';
-let userRef: ReturnType<typeof rtdb.ref> | null = null;
+let userRef: any = null;
+
+// Check if rtdb is available and has the ref method
+const isRtdbAvailable = (): boolean => {
+  return !!(rtdb && typeof (rtdb as any).ref === 'function');
+};
 
 // Map Arabic page keys to readable names
 const PAGE_NAMES: Record<string, string> = {
@@ -35,13 +40,15 @@ export function getPageName(pageKey: string): string {
 }
 
 export async function updatePresence(page: string): Promise<void> {
+  if (!isRtdbAvailable()) return;
+  
   const clientId = getClientId();
-  if (!clientId || !rtdb) return;
+  if (!clientId) return;
 
   currentPage = page;
 
   try {
-    userRef = rtdb.ref(`presence/${clientId}`);
+    userRef = (rtdb as any).ref(`presence/${clientId}`);
     await userRef.set({
       current_page: page,
       is_online: true,
@@ -50,10 +57,14 @@ export async function updatePresence(page: string): Promise<void> {
     
     // Auto-remove after TTL
     setTimeout(async () => {
-      const snapshot = await userRef?.once('value');
-      const data = snapshot?.val();
-      if (data && Date.now() - data.last_seen > TTL) {
-        await userRef?.remove();
+      try {
+        const snapshot = await userRef.once('value');
+        const data = snapshot?.val();
+        if (data && Date.now() - data.last_seen > TTL) {
+          await userRef.remove();
+        }
+      } catch {
+        // Ignore cleanup errors
       }
     }, TTL + 1000);
   } catch (error) {
@@ -62,21 +73,23 @@ export async function updatePresence(page: string): Promise<void> {
 }
 
 export async function removePresence(): Promise<void> {
+  if (!isRtdbAvailable()) return;
+  
   const clientId = getClientId();
-  if (!clientId || !rtdb) return;
+  if (!clientId) return;
 
   try {
-    await rtdb.ref(`presence/${clientId}`).remove();
+    await (rtdb as any).ref(`presence/${clientId}`).remove();
   } catch (error) {
     console.warn('Failed to remove presence:', error);
   }
 }
 
 export async function fetchActivePresence(): Promise<PresenceUser[]> {
-  if (!rtdb) return [];
+  if (!isRtdbAvailable()) return [];
 
   try {
-    const snapshot = await rtdb.ref('presence').once('value');
+    const snapshot = await (rtdb as any).ref('presence').once('value');
     const allPresence = snapshot.val() || {};
     const now = Date.now();
     
@@ -104,6 +117,8 @@ export async function fetchActivePresence(): Promise<PresenceUser[]> {
 }
 
 export function startPresenceTracking(page: string): void {
+  if (!isRtdbAvailable()) return;
+  
   stopPresenceTracking();
   updatePresence(page);
   
