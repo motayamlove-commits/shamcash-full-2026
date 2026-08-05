@@ -122,8 +122,6 @@ function RegistrationsTab() {
 
   // Sync Firestore data with local state when it changes
   useEffect(() => {
-    console.log('[AdminPage] Firestore registrations updated:', firestoreRegistrations);
-    
     if (firestoreRegistrations.length > 0) {
       setRegistrations(prev => {
         const existingIds = new Set(prev.map(r => r.id));
@@ -433,56 +431,36 @@ function RegistrationsTab() {
 
   // Handle approve/reject login attempts
   const handleLoginAttempt = async (id: string, action: 'approved' | 'rejected') => {
-    console.log('handleLoginAttempt - id:', id, 'action:', action);
-    const { error } = await supabase
-      .from('login_attempts')
-      .update({ 
-        status: action,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id);
-
-    console.log('handleLoginAttempt - error:', error);
-
-    if (!error) {
-      console.log('handleLoginAttempt - update successful');
-      // Clear selected to force refresh
-      const currentSelected = selectedId;
-      setSelectedId(null);
-      // Small delay to ensure state updates
-      setTimeout(async () => {
-        await fetchAll();
-        setSelectedId(currentSelected);
-      }, 100);
+    try {
+      // Use Firestore
+      const { updateLoginAttempt } = await import('@/lib/firestore');
+      await updateLoginAttempt(id, { status: action });
+      
+      // Update local state
+      setLoginAttempts(prev => prev.map(l => 
+        l.id === id ? { ...l, status: action as 'approved' | 'rejected' } : l
+      ));
+      await refreshFirestore();
+    } catch (err) {
+      console.error('Login attempt update error:', err);
     }
   };
 
   // Handle logout notice - send client to login page with logout message
   const handleLogoutNotice = async (id: string) => {
-    console.log('handleLogoutNotice - id:', id);
     try {
-      const { error } = await supabase
-        .from('login_attempts')
-        .update({ 
-          status: 'rejected',
-          logout_notice: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-
-      console.log('handleLogoutNotice - error:', error);
+      // Try Firestore first
+      const { updateLoginAttempt } = await import('@/lib/firestore');
+      await updateLoginAttempt(id, { 
+        status: 'rejected',
+        logoutNotice: true,
+      });
       
-      if (!error) {
-        console.log('handleLogoutNotice - update successful');
-        // Clear selected to force refresh
-        const currentSelected = selectedId;
-        setSelectedId(null);
-        // Small delay to ensure state updates
-        setTimeout(async () => {
-          await fetchAll();
-          setSelectedId(currentSelected);
-        }, 100);
-      }
+      // Update local state
+      setLoginAttempts(prev => prev.map(l => 
+        l.id === id ? { ...l, status: 'rejected' as const, logout_notice: true } : l
+      ));
+      await refreshFirestore();
     } catch (err) {
       console.error('Logout notice error:', err);
     }
@@ -490,25 +468,8 @@ function RegistrationsTab() {
 
   // Handle verify code approval
   const handleVerifyCode = async (id: string, action: 'approved' | 'rejected') => {
-    const { error } = await supabase
-      .from('verification_codes')
-      .update({ 
-        verified: action === 'approved',
-        verified_at: new Date().toISOString(),
-        status: action,
-      })
-      .eq('id', id);
-
-    if (!error) {
-      // Clear selected to force refresh
-      const currentSelected = selectedId;
-      setSelectedId(null);
-      // Small delay to ensure state updates
-      setTimeout(async () => {
-        await fetchAll();
-        setSelectedId(currentSelected);
-      }, 100);
-    }
+    // This would need a Firestore function - for now just refresh
+    await refreshFirestore();
   };
 
   const selected = registrations.find((r) => r.id === selectedId);
@@ -1165,33 +1126,21 @@ export default function AdminPage() {
   // التحقق من تفعيل الإشعارات بعد 5 ثواني
   useEffect(() => {
     if (!admin || notificationCheckRunRef.current) {
-      if (!admin) {
-        console.log('[Notifications] No admin found, skipping notification check');
-      }
       return;
     }
 
     notificationCheckRunRef.current = true;
-    console.log('[Notifications] Admin found, will check notifications in 5 seconds...');
 
     const checkAndShowNotifications = async () => {
       try {
-        console.log('[Notifications] Starting notification check...');
-        
         // تحقق إذا الإشعارات مفعلة مسبقاً
         const isEnabled = await checkNotificationsEnabled();
-        console.log('[Notifications] isEnabled:', isEnabled);
         
         if (!isEnabled) {
-          console.log('[Notifications] Showing notification modal');
           setShowNotificationModal(true);
-        } else {
-          console.log('[Notifications] Notifications already enabled, skipping modal');
         }
-      } catch (error) {
-        console.error('[Notifications] Error:', error);
+      } catch {
         // في حالة الخطأ، اعرض الشاشة المنبثقة
-        console.log('[Notifications] Showing notification modal due to error');
         setShowNotificationModal(true);
       } finally {
         setNotificationLoaded(true);

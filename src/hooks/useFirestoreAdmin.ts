@@ -36,8 +36,6 @@ type AdminLoginAttempt = {
 };
 
 function transformUser(user: UserProfile): AdminRegistration {
-  console.log('[transformUser] Original user data:', JSON.stringify(user, null, 2));
-  
   // Fields may be stored in extraFields or as top-level properties
   const fullName = user.fullName || user.extraFields?.fullName || '';
   const nationalId = user.nationalId || user.extraFields?.nationalId || '';
