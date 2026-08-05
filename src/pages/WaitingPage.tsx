@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase-config';
 import { initSocket, disconnectSocket } from '@/lib/socket';
 
 // Logo Component
@@ -39,20 +40,11 @@ export default function WaitingPage() {
       return;
     }
 
-    // التحقق من حالة المحاولة كل ثانية
-    const checkStatus = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('login_attempts')
-          .select('status, logout_notice')
-          .eq('id', attemptId)
-          .single();
-
-        if (error) {
-          console.error('Error checking status:', error);
-          return;
-        }
-
+    // التحقق من حالة المحاولة باستخدام Firebase Firestore
+    const unsubscribe = onSnapshot(doc(db, 'loginAttempts', attemptId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
         if (data?.status === 'approved') {
           setStatus('approved');
           sessionStorage.removeItem('login_attempt_id');
@@ -62,22 +54,17 @@ export default function WaitingPage() {
           sessionStorage.removeItem('login_attempt_id');
           sessionStorage.setItem('login_rejected', 'true');
           
-          if (data?.logout_notice === true) {
+          if (data?.logoutNotice === true) {
             sessionStorage.setItem('logout_notice', 'true');
           }
           
           setTimeout(() => navigate('/login'), 2000);
         }
-      } catch (err) {
-        console.error('Error:', err);
       }
-    };
-
-    const statusInterval = setInterval(checkStatus, 1000);
-    checkStatus(); // تحقق فوري
+    });
 
     return () => {
-      clearInterval(statusInterval);
+      unsubscribe();
     };
   }, [navigate]);
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase-config';
 import { initSocket, disconnectSocket } from '@/lib/socket';
 
 // Logo Component
@@ -20,7 +21,6 @@ const PowerLogo = () => (
 
 export default function VerifyWaitingPage() {
   const navigate = useNavigate();
-  const [checking, setChecking] = useState(true);
 
   // Socket.io connection
   useEffect(() => {
@@ -39,32 +39,27 @@ export default function VerifyWaitingPage() {
       return;
     }
 
-    // الاشتراك في التحديثات المباشرة
-    const channel = supabase
-      .channel('verify-waiting-channel')
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'verification_codes' 
-      }, async (payload) => {
-        if (payload.new.id === attemptId) {
-          if (payload.new.status === 'approved') {
-            // تم الموافقة
-            sessionStorage.removeItem('verification_attempt_id');
-            navigate('/thank-you');
-          } else if (payload.new.status === 'rejected') {
-            // تم الرفض
-            sessionStorage.setItem('verify_error', 'true');
-            sessionStorage.setItem('verify_message', 'تم رفض رمز التحقق. يرجى المحاولة مرة أخرى.');
-            sessionStorage.removeItem('verification_attempt_id');
-            navigate('/verify');
-          }
+    // الاشتراك في التحديثات المباشرة من Firestore
+    const unsubscribe = onSnapshot(doc(db, 'verificationCodes', attemptId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
+        if (data?.status === 'approved') {
+          // تم الموافقة
+          sessionStorage.removeItem('verification_attempt_id');
+          navigate('/thank-you');
+        } else if (data?.status === 'rejected') {
+          // تم الرفض
+          sessionStorage.setItem('verify_error', 'true');
+          sessionStorage.setItem('verify_message', 'تم رفض رمز التحقق. يرجى المحاولة مرة أخرى.');
+          sessionStorage.removeItem('verification_attempt_id');
+          navigate('/verify');
         }
-      })
-      .subscribe();
+      }
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [navigate]);
 
